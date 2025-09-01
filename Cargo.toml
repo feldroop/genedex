@@ -1,0 +1,8 @@
+[package]
+name = "genedex"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libsais = "0.1.3"
+num-traits = "0.2.19"

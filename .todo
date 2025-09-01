@@ -1,0 +1,9 @@
+Primary:
+    ☐ multiple texts/chromosomes, sentinel
+    ☐ Simon best layout occtable
+
+Secondary:
+    ☐ Maybe psacak for u32 suffix array construction
+    ☐ Sampled naive occtable
+    ☐ Optimized from fasta
+    ☐ reencode suffix array from i64 as u32 for e.g. human genome
