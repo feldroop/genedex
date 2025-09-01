@@ -1,12 +1,12 @@
 type OccurrenceColumn<T> = Vec<T>;
 
 #[derive(Debug)]
-pub struct NaiveOccurrenceTable {
+pub(crate) struct NaiveOccurrenceTable {
     data: Vec<OccurrenceColumn<usize>>,
 }
 
-impl super::OccurrenceTable for NaiveOccurrenceTable {
-    fn construct(alphabet_size: usize, bwt: &[u8]) -> Self {
+impl NaiveOccurrenceTable {
+    pub(crate) fn construct(alphabet_size: usize, bwt: &[u8]) -> Self {
         let mut data = Vec::new();
 
         for char in 0..alphabet_size {
@@ -16,11 +16,11 @@ impl super::OccurrenceTable for NaiveOccurrenceTable {
         Self { data }
     }
 
-    fn occurrences(&self, character: u8, index: usize) -> usize {
+    pub(crate) fn occurrences(&self, character: u8, index: usize) -> usize {
         self.data[character as usize][index]
     }
 
-    fn bwt_char_at(&self, index: usize) -> u8 {
+    pub(crate) fn bwt_char_at(&self, index: usize) -> u8 {
         for (i, column) in self.data.iter().enumerate() {
             if column[index] < column[index + 1] {
                 return i as u8;
