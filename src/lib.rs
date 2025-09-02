@@ -6,21 +6,12 @@ mod text_id_search_tree;
 
 use libsais::{OutputElement, ThreadCount};
 use num_traits::{NumCast, PrimInt};
+use rayon::prelude::*;
 
 use alphabet::Alphabet;
 use naive_occurrence_table::NaiveOccurrenceTable;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
-
-pub trait CompressionMode {}
-
-pub struct Uncompressed {}
-
-impl CompressionMode for Uncompressed {}
-
-pub struct U32Compressed {}
-
-impl CompressionMode for U32Compressed {}
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FmIndex<A, S, C> {
@@ -31,15 +22,16 @@ pub struct FmIndex<A, S, C> {
     text_ids: TexdIdSearchTree,
 }
 
-impl<A: Alphabet, S: OutputElement + 'static> FmIndex<A, S, Uncompressed> {
+impl<A: Alphabet, S: OutputElement + Send + Sync + 'static> FmIndex<A, S, Uncompressed> {
     // text chars must be smaller than alphabet size + 1 and greater than 0
+    // other operations use rayons configured number of threads
     pub fn new<'a>(
         texts: impl IntoIterator<Item = &'a [u8]>,
-        thread_count: u16,
+        suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
     ) -> Self {
         let (count, suffix_array, bwt, text_ids, text_len) =
-            create_data_structures::<A, S>(texts, thread_count);
+            create_data_structures::<A, S>(texts, suffix_array_construction_thread_count);
 
         let sampled_suffix_array =
             SampledSuffixArray::new_uncompressed(suffix_array, suffix_array_sampling_rate);
@@ -57,6 +49,8 @@ impl<A: Alphabet, S: OutputElement + 'static> FmIndex<A, S, Uncompressed> {
 }
 
 impl<A: Alphabet> FmIndex<A, i64, U32Compressed> {
+    // text chars must be smaller than alphabet size + 1 and greater than 0
+    // other operations use rayons configured number of threads
     pub fn new_with_u32_compressed_suffix_array<'a>(
         texts: impl IntoIterator<Item = &'a [u8]>,
         thread_count: u16,
@@ -150,13 +144,12 @@ impl<A: Alphabet> FmIndex<A, i64, U32Compressed> {
     }
 }
 
-fn create_data_structures<'a, A: Alphabet, S: OutputElement + 'static>(
+fn create_data_structures<'a, A: Alphabet, S: OutputElement + Send + Sync + 'static>(
     texts: impl IntoIterator<Item = &'a [u8]>,
-    thread_count: u16,
+    suffix_array_construction_thread_count: u16,
 ) -> (Vec<usize>, Vec<S>, Vec<u8>, TexdIdSearchTree, usize) {
     let (text, mut frequency_table, sentinel_indices) =
-        alphabet::create_concatenated_rank_text(texts, &A::TO_RANK_TRANSLATION_TABLE)
-            .expect("text should be of given alphabet");
+        alphabet::create_concatenated_rank_text(texts, &A::TO_RANK_TRANSLATION_TABLE);
 
     let text_ids = TexdIdSearchTree::new_from_sentinel_indices(sentinel_indices);
 
@@ -164,7 +157,7 @@ fn create_data_structures<'a, A: Alphabet, S: OutputElement + 'static>(
 
     let mut construction = libsais::SuffixArrayConstruction::for_text(&text)
         .in_owned_buffer()
-        .multi_threaded(ThreadCount::fixed(thread_count));
+        .multi_threaded(ThreadCount::fixed(suffix_array_construction_thread_count));
 
     unsafe {
         construction = construction.with_frequency_table(&mut frequency_table);
@@ -200,21 +193,46 @@ fn frequencies_to_cumulative_count_vector<S: OutputElement>(
     count
 }
 
-fn bwt_from_suffix_array<S: OutputElement>(suffix_array: &[S], text: &[u8]) -> Vec<u8> {
+fn bwt_from_suffix_array<S: OutputElement + Sync>(suffix_array: &[S], text: &[u8]) -> Vec<u8> {
     let mut bwt = vec![0; text.len()];
 
-    for (suffix_array_index, &text_index) in suffix_array.iter().enumerate() {
-        let text_index = <usize as NumCast>::from(text_index).unwrap();
-        bwt[suffix_array_index] = if text_index > 0 {
-            text[text_index - 1]
-        } else {
-            // last text character is always 0
-            0
-        };
-    }
+    suffix_array
+        .par_iter()
+        .zip(&mut bwt)
+        // type named to fix rust-analyzer problem
+        .for_each(|(&text_index, bwt_entry): (&S, &mut u8)| {
+            let text_index = <usize as NumCast>::from(text_index).unwrap();
+
+            *bwt_entry = if text_index > 0 {
+                text[text_index - 1]
+            } else {
+                // last text character is always 0
+                0
+            };
+        });
+
+    // for (suffix_array_index, &text_index) in suffix_array.iter().enumerate() {
+    //     let text_index = <usize as NumCast>::from(text_index).unwrap();
+    //     bwt[suffix_array_index] = if text_index > 0 {
+    //         text[text_index - 1]
+    //     } else {
+    //         // last text character is always 0
+    //         0
+    //     };
+    // }
 
     bwt
 }
+
+pub trait CompressionMode {}
+
+pub struct Uncompressed {}
+
+impl CompressionMode for Uncompressed {}
+
+pub struct U32Compressed {}
+
+impl CompressionMode for U32Compressed {}
 
 #[cfg(test)]
 mod tests {

@@ -1,4 +1,6 @@
 use libsais::OutputElement;
+use num_traits::NumCast;
+use rayon::prelude::*;
 
 pub trait Alphabet {
     const TO_RANK_TRANSLATION_TABLE: [u8; 256];
@@ -186,56 +188,61 @@ impl Alphabet for AsciiDnaIupacAsDnaWithN {
     }
 }
 
-pub(crate) fn transfrom_into_ranks_inplace<S: OutputElement>(
-    text: &mut [u8],
-    translation_table: &[u8; 256],
-    frequency_table: &mut [S],
-) -> Result<(), usize> {
-    for (i, c) in text.iter_mut().enumerate() {
-        *c = translation_table[*c as usize];
-
-        if *c == 255 {
-            return Err(i);
-        }
-
-        frequency_table[*c as usize] = frequency_table[*c as usize] + S::one();
-    }
-
-    Ok(())
-}
-
-type TextAndMetadata<O> = (Vec<u8>, Vec<O>, Vec<usize>);
-
-pub(crate) fn create_concatenated_rank_text<'a, S: OutputElement>(
+pub(crate) fn create_concatenated_rank_text<'a, S: OutputElement + Sync + Send>(
     texts: impl IntoIterator<Item = &'a [u8]>,
     translation_table: &[u8; 256],
-) -> Result<TextAndMetadata<S>, (usize, usize)> {
+) -> (Vec<u8>, Vec<S>, Vec<usize>) {
     let texts: Vec<_> = texts.into_iter().collect();
-    let needed_capacity = texts.iter().map(|t| t.len()).sum::<usize>() + texts.len();
+    let num_texts = texts.len();
 
-    let mut concatenated_text = Vec::with_capacity(needed_capacity);
+    let needed_capacity = texts.iter().map(|t| t.len()).sum::<usize>() + num_texts;
 
-    let mut frequency_table = vec![S::zero(); 256];
+    let sentinel_indices: Vec<_> = texts
+        .iter()
+        .scan(0, |state, t| {
+            let temp = *state + t.len();
+            *state += t.len() + 1;
+            Some(temp)
+        })
+        .collect();
 
-    let mut sentinel_indices = Vec::with_capacity(texts.len());
+    let mut concatenated_text = vec![0; needed_capacity];
+    let mut concatenated_text_splits = Vec::with_capacity(num_texts);
+    let mut remaining_slice = concatenated_text.as_mut_slice();
 
-    for (i, text) in texts.into_iter().enumerate() {
-        concatenated_text.extend_from_slice(text);
-        let offset = concatenated_text.len() - text.len();
-
-        transfrom_into_ranks_inplace(
-            &mut concatenated_text[offset..],
-            translation_table,
-            &mut frequency_table,
-        )
-        .map_err(|text_idx| (i, text_idx))?;
-
-        sentinel_indices.push(concatenated_text.len());
-        concatenated_text.push(0);
-        frequency_table[0] = frequency_table[0] + S::one();
+    for t in texts.iter() {
+        let (this, remaining) = remaining_slice.split_at_mut(t.len() + 1);
+        concatenated_text_splits.push(this);
+        remaining_slice = remaining;
     }
 
-    Ok((concatenated_text, frequency_table, sentinel_indices))
+    let mut frequency_table = texts
+        .into_par_iter()
+        .zip(concatenated_text_splits)
+        .map(|(text, concatenated_text_split)| {
+            let mut frequency_table = vec![S::zero(); 256];
+
+            for (source, target) in text.iter().zip(concatenated_text_split) {
+                *target = translation_table[*source as usize];
+                frequency_table[*target as usize] = frequency_table[*target as usize] + S::one();
+            }
+
+            frequency_table
+        })
+        .reduce_with(merge_frequency_tables)
+        .expect("There should be at least one texts");
+
+    frequency_table[0] = <S as NumCast>::from(num_texts).unwrap();
+
+    (concatenated_text, frequency_table, sentinel_indices)
+}
+
+fn merge_frequency_tables<S: OutputElement>(mut f1: Vec<S>, f2: Vec<S>) -> Vec<S> {
+    for (x1, x2) in f1.iter_mut().zip(f2) {
+        *x1 = *x1 + x2;
+    }
+
+    f1
 }
 
 #[cfg(test)]
@@ -246,7 +253,7 @@ mod tests {
     fn concat_text() {
         let texts = [b"cccaaagggttt".as_slice(), b"acgtacgtacgt"];
         let (text, frequency_table, sentinel_indices) =
-            create_concatenated_rank_text::<i32>(texts, &ASCII_DNA_TRANSLATION_TABLE).unwrap();
+            create_concatenated_rank_text::<i32>(texts, &ASCII_DNA_TRANSLATION_TABLE);
 
         assert_eq!(
             text,

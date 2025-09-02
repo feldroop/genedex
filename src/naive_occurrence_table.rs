@@ -4,6 +4,7 @@ use crate::alphabet::Alphabet;
 
 type OccurrenceColumn<T> = Vec<T>;
 
+// parallel construction?
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
 pub(crate) struct NaiveOccurrenceTable<A> {
