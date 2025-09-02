@@ -22,6 +22,10 @@ pub struct FmIndex<A, S, C> {
     text_ids: TexdIdSearchTree,
 }
 
+pub type FmIndexU32<A> = FmIndex<A, i64, U32Compressed>;
+pub type FmIndexI32<A> = FmIndex<A, i32, Uncompressed>;
+pub type FmIndexI64<A> = FmIndex<A, i64, Uncompressed>;
+
 impl<A: Alphabet, S: OutputElement + Send + Sync + 'static> FmIndex<A, S, Uncompressed> {
     // text chars must be smaller than alphabet size + 1 and greater than 0
     // other operations use rayons configured number of threads
@@ -48,16 +52,16 @@ impl<A: Alphabet, S: OutputElement + Send + Sync + 'static> FmIndex<A, S, Uncomp
     }
 }
 
-impl<A: Alphabet> FmIndex<A, i64, U32Compressed> {
+impl<A: Alphabet> FmIndexU32<A> {
     // text chars must be smaller than alphabet size + 1 and greater than 0
     // other operations use rayons configured number of threads
-    pub fn new_with_u32_compressed_suffix_array<'a>(
+    pub fn new<'a>(
         texts: impl IntoIterator<Item = &'a [u8]>,
-        thread_count: u16,
+        suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
     ) -> Self {
         let (count, suffix_array, bwt, text_ids, text_len) =
-            create_data_structures::<A, i64>(texts, thread_count);
+            create_data_structures::<A, i64>(texts, suffix_array_construction_thread_count);
 
         let sampled_suffix_array =
             SampledSuffixArray::new_u32_compressed(suffix_array, suffix_array_sampling_rate);
@@ -131,8 +135,8 @@ impl<A: Alphabet, S: PrimInt + 'static> FmIndex<A, S, Uncompressed> {
     }
 }
 
-impl<A: Alphabet> FmIndex<A, i64, U32Compressed> {
-    pub fn locate_u32_compressed(&self, query: &[u8]) -> impl Iterator<Item = (usize, usize)> {
+impl<A: Alphabet> FmIndexU32<A> {
+    pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = (usize, usize)> {
         let (start, end) = self.search_suffix_array_interval(query);
 
         self.suffix_array
@@ -245,13 +249,13 @@ mod tests {
     fn create_index() -> FmIndex<AsciiDna, i32, Uncompressed> {
         let text = b"cccaaagggttt".as_slice();
 
-        FmIndex::new([text], 1, 3)
+        FmIndexI32::new([text], 1, 3)
     }
 
     fn create_index_u32_compressed() -> FmIndex<AsciiDna, i64, U32Compressed> {
         let text = b"cccaaagggttt".as_slice();
 
-        FmIndex::new_with_u32_compressed_suffix_array([text], 1, 3)
+        FmIndexU32::new([text], 1, 3)
     }
 
     static BASIC_QUERY: &[u8] = b"gg";
@@ -265,9 +269,7 @@ mod tests {
         let index_u32_compressed = create_index_u32_compressed();
 
         let results: HashSet<_> = index.locate(BASIC_QUERY).collect();
-        let results_u32_compressed: HashSet<_> = index_u32_compressed
-            .locate_u32_compressed(BASIC_QUERY)
-            .collect();
+        let results_u32_compressed: HashSet<_> = index_u32_compressed.locate(BASIC_QUERY).collect();
 
         assert_eq!(results, HashSet::from_iter([(0, 6), (0, 7)]));
         assert_eq!(results_u32_compressed, HashSet::from_iter([(0, 6), (0, 7)]));
@@ -279,9 +281,7 @@ mod tests {
         let index_u32_compressed = create_index_u32_compressed();
 
         let results: HashSet<_> = index.locate(FRONT_QUERY).collect();
-        let results_u32_compressed: HashSet<_> = index_u32_compressed
-            .locate_u32_compressed(FRONT_QUERY)
-            .collect();
+        let results_u32_compressed: HashSet<_> = index_u32_compressed.locate(FRONT_QUERY).collect();
 
         assert_eq!(results, HashSet::from_iter([(0, 0), (0, 1), (0, 2)]));
         assert_eq!(
@@ -296,9 +296,8 @@ mod tests {
         let index_u32_compressed = create_index_u32_compressed();
 
         let results: HashSet<_> = index.locate(WRAPPING_QUERY).collect();
-        let results_u32_compressed: HashSet<_> = index_u32_compressed
-            .locate_u32_compressed(WRAPPING_QUERY)
-            .collect();
+        let results_u32_compressed: HashSet<_> =
+            index_u32_compressed.locate(WRAPPING_QUERY).collect();
 
         assert!(results.is_empty());
         assert!(results_u32_compressed.is_empty());
@@ -308,14 +307,12 @@ mod tests {
     fn search_multitext() {
         let texts = [b"cccaaagggttt".as_slice(), b"acgtacgtacgt"];
 
-        let index = FmIndex::<AsciiDna, i64, U32Compressed>::new_with_u32_compressed_suffix_array(
-            texts, 1, 3,
-        );
+        let index = FmIndexU32::<AsciiDna>::new(texts, 1, 3);
 
-        let results_basic_query: HashSet<_> = index.locate_u32_compressed(BASIC_QUERY).collect();
+        let results_basic_query: HashSet<_> = index.locate(BASIC_QUERY).collect();
         assert_eq!(results_basic_query, HashSet::from_iter([(0, 6), (0, 7)]));
 
-        let results_multi_query: HashSet<_> = index.locate_u32_compressed(MULTI_QUERY).collect();
+        let results_multi_query: HashSet<_> = index.locate(MULTI_QUERY).collect();
         assert_eq!(
             results_multi_query,
             HashSet::from_iter([(0, 8), (1, 2), (1, 6), (1, 10)])
