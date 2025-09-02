@@ -1,4 +1,5 @@
 // static binary search tree, heap-like memory layout in flat array
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
 pub(crate) struct TexdIdSearchTree {
     nodes: Vec<Node>,
@@ -120,7 +121,8 @@ fn right_child_index(curr_node_index: usize) -> usize {
 // this encodes the threshold as a positive value and a text id as its bit flipped (negative) value
 // this is a space optimization meant to improve speed by making the structure as small and cache-friendly
 // as possible
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy)]
 struct Node {
     data: isize,
 }

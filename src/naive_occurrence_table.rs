@@ -1,19 +1,28 @@
+use std::marker::PhantomData;
+
+use crate::alphabet::Alphabet;
+
 type OccurrenceColumn<T> = Vec<T>;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
-pub(crate) struct NaiveOccurrenceTable {
+pub(crate) struct NaiveOccurrenceTable<A> {
     data: Vec<OccurrenceColumn<usize>>,
+    _alphabet_maker: PhantomData<A>,
 }
 
-impl NaiveOccurrenceTable {
-    pub(crate) fn construct(alphabet_size: usize, bwt: &[u8]) -> Self {
+impl<A: Alphabet> NaiveOccurrenceTable<A> {
+    pub(crate) fn construct(bwt: &[u8]) -> Self {
         let mut data = Vec::new();
 
-        for rank in 1..=alphabet_size {
+        for rank in 1..=A::size() {
             data.push(create_occurrence_column(rank as u8, bwt));
         }
 
-        Self { data }
+        Self {
+            data,
+            _alphabet_maker: PhantomData,
+        }
     }
 
     // rank should not be zero

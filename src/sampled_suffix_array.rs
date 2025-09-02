@@ -1,17 +1,20 @@
 use num_traits::{NumCast, PrimInt};
 
-use std::ops::Range;
+use std::{marker::PhantomData, ops::Range};
+
+use crate::{U32Compressed, Uncompressed, alphabet::Alphabet};
 
 use super::FmIndex;
 
-pub(crate) struct SampledSuffixArray<O> {
-    data: Vec<O>,
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub(crate) struct SampledSuffixArray<S, C> {
+    data: Vec<S>,
     sampling_rate: usize,
-    is_u32_compressed: bool,
+    _compression_marker: PhantomData<C>,
 }
 
-impl<O: PrimInt + 'static> SampledSuffixArray<O> {
-    pub(crate) fn new(mut full_suffix_array: Vec<O>, sampling_rate: usize) -> Self {
+impl<S: PrimInt + 'static> SampledSuffixArray<S, Uncompressed> {
+    pub(crate) fn new_uncompressed(mut full_suffix_array: Vec<S>, sampling_rate: usize) -> Self {
         let mut num_retained_values = 0;
         let mut write_index = 0;
 
@@ -29,16 +32,12 @@ impl<O: PrimInt + 'static> SampledSuffixArray<O> {
         Self {
             data: full_suffix_array,
             sampling_rate,
-            is_u32_compressed: false,
+            _compression_marker: PhantomData,
         }
-    }
-
-    pub(crate) fn is_u32_compressed(&self) -> bool {
-        self.is_u32_compressed
     }
 }
 
-impl SampledSuffixArray<i64> {
+impl SampledSuffixArray<i64, U32Compressed> {
     pub(crate) fn new_u32_compressed(
         mut full_suffix_array: Vec<i64>,
         sampling_rate: usize,
@@ -74,37 +73,37 @@ impl SampledSuffixArray<i64> {
         Self {
             data: full_suffix_array,
             sampling_rate,
-            is_u32_compressed: true,
+            _compression_marker: PhantomData,
         }
     }
 }
 
-impl<O: PrimInt + 'static> SampledSuffixArray<O> {
-    pub(crate) fn recover_range(
+impl<S: PrimInt + 'static> SampledSuffixArray<S, Uncompressed> {
+    pub(crate) fn recover_range_uncompressed<A: Alphabet>(
         &self,
         range: Range<usize>,
-        index: &FmIndex<O>,
-    ) -> impl Iterator<Item = O> {
+        index: &FmIndex<A, S, Uncompressed>,
+    ) -> impl Iterator<Item = S> {
         range.map(|mut i| {
-            let mut num_steps_done = O::zero();
+            let mut num_steps_done = S::zero();
 
             while i % self.sampling_rate != 0 {
                 let bwt_rank = index.occurrence_table.bwt_rank_at(i);
                 i = index.lf_mapping_step(bwt_rank, i);
-                num_steps_done = num_steps_done + O::one();
+                num_steps_done = num_steps_done + S::one();
             }
 
             (self.data[i / self.sampling_rate] + num_steps_done)
-                % <O as NumCast>::from(index.text_len).unwrap()
+                % <S as NumCast>::from(index.text_len).unwrap()
         })
     }
 }
 
-impl SampledSuffixArray<i64> {
-    pub(crate) fn recover_range_u32_compressed(
+impl SampledSuffixArray<i64, U32Compressed> {
+    pub(crate) fn recover_range_u32_compressed<A: Alphabet>(
         &self,
         range: Range<usize>,
-        index: &FmIndex<i64>,
+        index: &FmIndex<A, i64, U32Compressed>,
     ) -> impl Iterator<Item = u32> {
         range.map(|mut i| {
             let mut num_steps_done = 0;

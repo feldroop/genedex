@@ -1,5 +1,10 @@
 use libsais::OutputElement;
 
+pub trait Alphabet {
+    const TO_RANK_TRANSLATION_TABLE: [u8; 256];
+    fn size() -> usize;
+}
+
 const ASCII_DNA_TRANSLATION_TABLE: [u8; 256] = {
     let mut table = [255; 256];
 
@@ -131,41 +136,60 @@ const ASCII_DNA_IUPAC_AS_DNA_N_TRANSLATION_TABLE: [u8; 256] = {
     table
 };
 
-#[derive(Debug, Clone, Copy)]
-pub struct Alphabet {
-    pub(crate) u8_to_rank_translation_table: &'static [u8; 256],
-    pub(crate) alphabet_size: usize,
+pub struct AsciiDna {}
+
+impl Alphabet for AsciiDna {
+    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_TRANSLATION_TABLE;
+
+    fn size() -> usize {
+        4
+    }
 }
 
-pub static ASCII_DNA: Alphabet = Alphabet {
-    u8_to_rank_translation_table: &ASCII_DNA_TRANSLATION_TABLE,
-    alphabet_size: 4,
-};
+pub struct AsciiDnaWithN {}
 
-pub static ASCII_DNA_N: Alphabet = Alphabet {
-    u8_to_rank_translation_table: &ASCII_DNA_N_TRANSLATION_TABLE,
-    alphabet_size: 5,
-};
+impl Alphabet for AsciiDnaWithN {
+    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_N_TRANSLATION_TABLE;
 
-pub static ASCII_DNA_IUPAC: Alphabet = Alphabet {
-    u8_to_rank_translation_table: &ASCII_DNA_IUPAC_TRANSLATION_TABLE,
-    alphabet_size: 16,
-};
+    fn size() -> usize {
+        5
+    }
+}
 
-pub static ASCII_DNA_IUPAC_AS_DNA: Alphabet = Alphabet {
-    u8_to_rank_translation_table: &ASCII_DNA_IUPAC_AS_DNA_TRANSLATION_TABLE,
-    alphabet_size: 4,
-};
+pub struct AsciiDnaIupac {}
 
-pub static ASCII_DNA_IUPAC_AS_DNA_N: Alphabet = Alphabet {
-    u8_to_rank_translation_table: &ASCII_DNA_IUPAC_AS_DNA_N_TRANSLATION_TABLE,
-    alphabet_size: 5,
-};
+impl Alphabet for AsciiDnaIupac {
+    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_TRANSLATION_TABLE;
 
-pub(crate) fn transfrom_into_ranks_inplace<O: OutputElement>(
+    fn size() -> usize {
+        16
+    }
+}
+
+pub struct AsciiDnaIupacAsDna {}
+
+impl Alphabet for AsciiDnaIupacAsDna {
+    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_AS_DNA_TRANSLATION_TABLE;
+
+    fn size() -> usize {
+        4
+    }
+}
+
+pub struct AsciiDnaIupacAsDnaWithN {}
+
+impl Alphabet for AsciiDnaIupacAsDnaWithN {
+    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_AS_DNA_N_TRANSLATION_TABLE;
+
+    fn size() -> usize {
+        5
+    }
+}
+
+pub(crate) fn transfrom_into_ranks_inplace<S: OutputElement>(
     text: &mut [u8],
     translation_table: &[u8; 256],
-    frequency_table: &mut [O],
+    frequency_table: &mut [S],
 ) -> Result<(), usize> {
     for (i, c) in text.iter_mut().enumerate() {
         *c = translation_table[*c as usize];
@@ -174,7 +198,7 @@ pub(crate) fn transfrom_into_ranks_inplace<O: OutputElement>(
             return Err(i);
         }
 
-        frequency_table[*c as usize] = frequency_table[*c as usize] + O::one();
+        frequency_table[*c as usize] = frequency_table[*c as usize] + S::one();
     }
 
     Ok(())
@@ -182,16 +206,16 @@ pub(crate) fn transfrom_into_ranks_inplace<O: OutputElement>(
 
 type TextAndMetadata<O> = (Vec<u8>, Vec<O>, Vec<usize>);
 
-pub(crate) fn create_concatenated_rank_text<'a, O: OutputElement>(
+pub(crate) fn create_concatenated_rank_text<'a, S: OutputElement>(
     texts: impl IntoIterator<Item = &'a [u8]>,
     translation_table: &[u8; 256],
-) -> Result<TextAndMetadata<O>, (usize, usize)> {
+) -> Result<TextAndMetadata<S>, (usize, usize)> {
     let texts: Vec<_> = texts.into_iter().collect();
     let needed_capacity = texts.iter().map(|t| t.len()).sum::<usize>() + texts.len();
 
     let mut concatenated_text = Vec::with_capacity(needed_capacity);
 
-    let mut frequency_table = vec![O::zero(); 256];
+    let mut frequency_table = vec![S::zero(); 256];
 
     let mut sentinel_indices = Vec::with_capacity(texts.len());
 
@@ -208,7 +232,7 @@ pub(crate) fn create_concatenated_rank_text<'a, O: OutputElement>(
 
         sentinel_indices.push(concatenated_text.len());
         concatenated_text.push(0);
-        frequency_table[0] = frequency_table[0] + O::one();
+        frequency_table[0] = frequency_table[0] + S::one();
     }
 
     Ok((concatenated_text, frequency_table, sentinel_indices))
