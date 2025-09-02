@@ -89,8 +89,8 @@ impl<O: PrimInt + 'static> SampledSuffixArray<O> {
             let mut num_steps_done = O::zero();
 
             while i % self.sampling_rate != 0 {
-                let bwt_char = index.occurrence_table.bwt_char_at(i);
-                i = index.lf_mapping_step(i, bwt_char);
+                let bwt_rank = index.occurrence_table.bwt_rank_at(i);
+                i = index.lf_mapping_step(bwt_rank, i);
                 num_steps_done = num_steps_done + O::one();
             }
 
@@ -110,8 +110,8 @@ impl SampledSuffixArray<i64> {
             let mut num_steps_done = 0;
 
             while i % self.sampling_rate != 0 {
-                let bwt_char = index.occurrence_table.bwt_char_at(i);
-                i = index.lf_mapping_step(i, bwt_char);
+                let bwt_rank = index.occurrence_table.bwt_rank_at(i);
+                i = index.lf_mapping_step(bwt_rank, i);
                 num_steps_done += 1;
             }
 

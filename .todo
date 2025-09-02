@@ -1,6 +1,4 @@
-Primary:
-    ☐ multiple texts/chromosomes, sentinel
-    ☐ Simon best layout occtable
-
-Secondary:
-    ☐ Optimized from fasta
+- parallelize building steps
+- könnte man N einfach weglassen im Occ?
+- Simon best layout occtable
+- optional serialization
