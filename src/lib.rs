@@ -1,6 +1,6 @@
 pub mod alphabet;
-pub mod naive_occurrence_table;
 
+mod occurrence_table;
 mod sampled_suffix_array;
 mod text_id_search_tree;
 
@@ -9,15 +9,14 @@ use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 
 use alphabet::Alphabet;
-use naive_occurrence_table::NaiveOccurrenceTable;
+use occurrence_table::OccurrenceTable;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FmIndex<A, S, C> {
-    text_len: usize,
     count: Vec<usize>,
-    occurrence_table: NaiveOccurrenceTable<A>,
+    occurrence_table: OccurrenceTable<A>,
     suffix_array: SampledSuffixArray<S, C>,
     text_ids: TexdIdSearchTree,
 }
@@ -34,16 +33,15 @@ impl<A: Alphabet, S: OutputElement + Send + Sync + 'static> FmIndex<A, S, Uncomp
         suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
     ) -> Self {
-        let (count, suffix_array, bwt, text_ids, text_len) =
+        let (count, suffix_array, bwt, text_ids) =
             create_data_structures::<A, S>(texts, suffix_array_construction_thread_count);
 
         let sampled_suffix_array =
             SampledSuffixArray::new_uncompressed(suffix_array, suffix_array_sampling_rate);
 
-        let occurrence_table = NaiveOccurrenceTable::construct(&bwt);
+        let occurrence_table = OccurrenceTable::construct(&bwt);
 
         FmIndex {
-            text_len,
             count,
             occurrence_table,
             suffix_array: sampled_suffix_array,
@@ -60,16 +58,15 @@ impl<A: Alphabet> FmIndexU32<A> {
         suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
     ) -> Self {
-        let (count, suffix_array, bwt, text_ids, text_len) =
+        let (count, suffix_array, bwt, text_ids) =
             create_data_structures::<A, i64>(texts, suffix_array_construction_thread_count);
 
         let sampled_suffix_array =
             SampledSuffixArray::new_u32_compressed(suffix_array, suffix_array_sampling_rate);
 
-        let occurrence_table = NaiveOccurrenceTable::construct(&bwt);
+        let occurrence_table = OccurrenceTable::construct(&bwt);
 
         FmIndex {
-            text_len,
             count,
             occurrence_table,
             suffix_array: sampled_suffix_array,
@@ -86,7 +83,7 @@ impl<A: Alphabet, S: PrimInt + 'static, C: CompressionMode> FmIndex<A, S, C> {
 
     // returns half open interval [start, end)
     fn search_suffix_array_interval(&self, query: &[u8]) -> (usize, usize) {
-        let (mut start, mut end) = (0, self.text_len);
+        let (mut start, mut end) = (0, self.occurrence_table.text_len());
 
         for &character in query.iter().rev() {
             let rank = A::TO_RANK_TRANSLATION_TABLE[character as usize];
@@ -110,7 +107,7 @@ impl<A: Alphabet, S: PrimInt + 'static, C: CompressionMode> FmIndex<A, S, C> {
 
     fn occurrences(&self, rank: u8, idx: usize) -> usize {
         if rank == 0 {
-            if idx == self.text_len {
+            if idx == self.occurrence_table.text_len() {
                 self.text_ids.num_texts()
             } else {
                 // text id is actually exactly the number of occurrences
@@ -151,7 +148,7 @@ impl<A: Alphabet> FmIndexU32<A> {
 fn create_data_structures<'a, A: Alphabet, S: OutputElement + Send + Sync + 'static>(
     texts: impl IntoIterator<Item = &'a [u8]>,
     suffix_array_construction_thread_count: u16,
-) -> (Vec<usize>, Vec<S>, Vec<u8>, TexdIdSearchTree, usize) {
+) -> (Vec<usize>, Vec<S>, Vec<u8>, TexdIdSearchTree) {
     let (text, mut frequency_table, sentinel_indices) =
         alphabet::create_concatenated_rank_text(texts, &A::TO_RANK_TRANSLATION_TABLE);
 
@@ -174,7 +171,7 @@ fn create_data_structures<'a, A: Alphabet, S: OutputElement + Send + Sync + 'sta
 
     let bwt = bwt_from_suffix_array(&suffix_array, &text);
 
-    (count, suffix_array, bwt, text_ids, text.len())
+    (count, suffix_array, bwt, text_ids)
 }
 
 fn frequencies_to_cumulative_count_vector<S: OutputElement>(
@@ -214,16 +211,6 @@ fn bwt_from_suffix_array<S: OutputElement + Sync>(suffix_array: &[S], text: &[u8
                 0
             };
         });
-
-    // for (suffix_array_index, &text_index) in suffix_array.iter().enumerate() {
-    //     let text_index = <usize as NumCast>::from(text_index).unwrap();
-    //     bwt[suffix_array_index] = if text_index > 0 {
-    //         text[text_index - 1]
-    //     } else {
-    //         // last text character is always 0
-    //         0
-    //     };
-    // }
 
     bwt
 }

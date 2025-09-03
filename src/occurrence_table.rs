@@ -7,12 +7,12 @@ type OccurrenceColumn<T> = Vec<T>;
 // parallel construction?
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
-pub(crate) struct NaiveOccurrenceTable<A> {
+pub(crate) struct OccurrenceTable<A> {
     data: Vec<OccurrenceColumn<usize>>,
     _alphabet_maker: PhantomData<A>,
 }
 
-impl<A: Alphabet> NaiveOccurrenceTable<A> {
+impl<A: Alphabet> OccurrenceTable<A> {
     pub(crate) fn construct(bwt: &[u8]) -> Self {
         let mut data = Vec::new();
 
@@ -40,6 +40,10 @@ impl<A: Alphabet> NaiveOccurrenceTable<A> {
         }
 
         unreachable!()
+    }
+
+    pub(crate) fn text_len(&self) -> usize {
+        self.data.first().unwrap().len() - 1
     }
 }
 

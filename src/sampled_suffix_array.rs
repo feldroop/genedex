@@ -94,7 +94,7 @@ impl<S: PrimInt + 'static> SampledSuffixArray<S, Uncompressed> {
             }
 
             (self.data[i / self.sampling_rate] + num_steps_done)
-                % <S as NumCast>::from(index.text_len).unwrap()
+                % <S as NumCast>::from(index.occurrence_table.text_len()).unwrap()
         })
     }
 }
@@ -124,7 +124,8 @@ impl SampledSuffixArray<i64, U32Compressed> {
                 u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]])
             };
 
-            (extracted_data + num_steps_done) % u32::try_from(index.text_len).unwrap()
+            (extracted_data + num_steps_done)
+                % u32::try_from(index.occurrence_table.text_len()).unwrap()
         })
     }
 }
