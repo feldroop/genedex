@@ -188,11 +188,13 @@ impl Alphabet for AsciiDnaIupacAsDnaWithN {
     }
 }
 
-pub(crate) fn create_concatenated_rank_text<'a, S: OutputElement + Sync + Send>(
-    texts: impl IntoIterator<Item = &'a [u8]>,
+pub(crate) fn create_concatenated_rank_text<S: OutputElement + Sync + Send, T: AsRef<[u8]>>(
+    texts: impl IntoIterator<Item = T>,
     translation_table: &[u8; 256],
 ) -> (Vec<u8>, Vec<S>, Vec<usize>) {
-    let texts: Vec<_> = texts.into_iter().collect();
+    // this generic texts owned vec is needed for the as_ref interface
+    let generic_texts: Vec<_> = texts.into_iter().collect();
+    let texts: Vec<&[u8]> = generic_texts.iter().map(|t| t.as_ref()).collect();
     let num_texts = texts.len();
 
     let needed_capacity = texts.iter().map(|t| t.len()).sum::<usize>() + num_texts;
@@ -253,7 +255,7 @@ mod tests {
     fn concat_text() {
         let texts = [b"cccaaagggttt".as_slice(), b"acgtacgtacgt"];
         let (text, frequency_table, sentinel_indices) =
-            create_concatenated_rank_text::<i32>(texts, &ASCII_DNA_TRANSLATION_TABLE);
+            create_concatenated_rank_text::<i32, _>(texts, &ASCII_DNA_TRANSLATION_TABLE);
 
         assert_eq!(
             text,

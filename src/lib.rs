@@ -28,13 +28,13 @@ pub type FmIndexI64<A> = FmIndex<A, i64, Uncompressed>;
 impl<A: Alphabet, S: OutputElement + Send + Sync + 'static> FmIndex<A, S, Uncompressed> {
     // text chars must be smaller than alphabet size + 1 and greater than 0
     // other operations use rayons configured number of threads
-    pub fn new<'a>(
-        texts: impl IntoIterator<Item = &'a [u8]>,
+    pub fn new<T: AsRef<[u8]>>(
+        texts: impl IntoIterator<Item = T>,
         suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
     ) -> Self {
         let (count, suffix_array, bwt, text_ids) =
-            create_data_structures::<A, S>(texts, suffix_array_construction_thread_count);
+            create_data_structures::<A, S, T>(texts, suffix_array_construction_thread_count);
 
         let sampled_suffix_array =
             SampledSuffixArray::new_uncompressed(suffix_array, suffix_array_sampling_rate);
@@ -53,13 +53,13 @@ impl<A: Alphabet, S: OutputElement + Send + Sync + 'static> FmIndex<A, S, Uncomp
 impl<A: Alphabet> FmIndexU32<A> {
     // text chars must be smaller than alphabet size + 1 and greater than 0
     // other operations use rayons configured number of threads
-    pub fn new<'a>(
-        texts: impl IntoIterator<Item = &'a [u8]>,
+    pub fn new<T: AsRef<[u8]>>(
+        texts: impl IntoIterator<Item = T>,
         suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
     ) -> Self {
         let (count, suffix_array, bwt, text_ids) =
-            create_data_structures::<A, i64>(texts, suffix_array_construction_thread_count);
+            create_data_structures::<A, i64, T>(texts, suffix_array_construction_thread_count);
 
         let sampled_suffix_array =
             SampledSuffixArray::new_u32_compressed(suffix_array, suffix_array_sampling_rate);
@@ -145,8 +145,8 @@ impl<A: Alphabet> FmIndexU32<A> {
     }
 }
 
-fn create_data_structures<'a, A: Alphabet, S: OutputElement + Send + Sync + 'static>(
-    texts: impl IntoIterator<Item = &'a [u8]>,
+fn create_data_structures<A: Alphabet, S: OutputElement + Send + Sync + 'static, T: AsRef<[u8]>>(
+    texts: impl IntoIterator<Item = T>,
     suffix_array_construction_thread_count: u16,
 ) -> (Vec<usize>, Vec<S>, Vec<u8>, TexdIdSearchTree) {
     let (text, mut frequency_table, sentinel_indices) =
