@@ -60,10 +60,6 @@ impl TexdIdSearchTree {
 
         self.nodes[curr_node_index].get_text_id_for_leaf()
     }
-
-    pub(crate) fn num_texts(&self) -> usize {
-        self.sentinel_indices.len()
-    }
 }
 
 fn add_nodes(

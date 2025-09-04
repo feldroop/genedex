@@ -88,13 +88,13 @@ impl<S: PrimInt + 'static> SampledSuffixArray<S, Uncompressed> {
             let mut num_steps_done = S::zero();
 
             while i % self.sampling_rate != 0 {
-                let bwt_rank = index.occurrence_table.bwt_rank_at(i);
+                let bwt_rank = index.string_rank.symbol_at(i);
                 i = index.lf_mapping_step(bwt_rank, i);
                 num_steps_done = num_steps_done + S::one();
             }
 
             (self.data[i / self.sampling_rate] + num_steps_done)
-                % <S as NumCast>::from(index.occurrence_table.text_len()).unwrap()
+                % <S as NumCast>::from(index.string_rank.len()).unwrap()
         })
     }
 }
@@ -109,7 +109,7 @@ impl SampledSuffixArray<i64, U32Compressed> {
             let mut num_steps_done = 0;
 
             while i % self.sampling_rate != 0 {
-                let bwt_rank = index.occurrence_table.bwt_rank_at(i);
+                let bwt_rank = index.string_rank.symbol_at(i);
                 i = index.lf_mapping_step(bwt_rank, i);
                 num_steps_done += 1;
             }
@@ -124,8 +124,7 @@ impl SampledSuffixArray<i64, U32Compressed> {
                 u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]])
             };
 
-            (extracted_data + num_steps_done)
-                % u32::try_from(index.occurrence_table.text_len()).unwrap()
+            (extracted_data + num_steps_done) % u32::try_from(index.string_rank.len()).unwrap()
         })
     }
 }

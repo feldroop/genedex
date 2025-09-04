@@ -2,8 +2,9 @@ use libsais::OutputElement;
 use num_traits::NumCast;
 use rayon::prelude::*;
 
+// sentinel 0 is currently always included
 pub trait Alphabet {
-    const TO_RANK_TRANSLATION_TABLE: [u8; 256];
+    const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256];
     fn size() -> usize;
 }
 
@@ -141,27 +142,27 @@ const ASCII_DNA_IUPAC_AS_DNA_N_TRANSLATION_TABLE: [u8; 256] = {
 pub struct AsciiDna {}
 
 impl Alphabet for AsciiDna {
-    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_TRANSLATION_TABLE;
-
-    fn size() -> usize {
-        4
-    }
-}
-
-pub struct AsciiDnaWithN {}
-
-impl Alphabet for AsciiDnaWithN {
-    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_N_TRANSLATION_TABLE;
+    const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_TRANSLATION_TABLE;
 
     fn size() -> usize {
         5
     }
 }
 
+pub struct AsciiDnaWithN {}
+
+impl Alphabet for AsciiDnaWithN {
+    const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_N_TRANSLATION_TABLE;
+
+    fn size() -> usize {
+        6
+    }
+}
+
 pub struct AsciiDnaIupac {}
 
 impl Alphabet for AsciiDnaIupac {
-    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_TRANSLATION_TABLE;
+    const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_TRANSLATION_TABLE;
 
     fn size() -> usize {
         16
@@ -171,20 +172,20 @@ impl Alphabet for AsciiDnaIupac {
 pub struct AsciiDnaIupacAsDna {}
 
 impl Alphabet for AsciiDnaIupacAsDna {
-    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_AS_DNA_TRANSLATION_TABLE;
+    const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_AS_DNA_TRANSLATION_TABLE;
 
     fn size() -> usize {
-        4
+        5
     }
 }
 
 pub struct AsciiDnaIupacAsDnaWithN {}
 
 impl Alphabet for AsciiDnaIupacAsDnaWithN {
-    const TO_RANK_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_AS_DNA_N_TRANSLATION_TABLE;
+    const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_AS_DNA_N_TRANSLATION_TABLE;
 
     fn size() -> usize {
-        5
+        6
     }
 }
 

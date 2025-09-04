@@ -9,14 +9,14 @@ use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 
 use alphabet::Alphabet;
-use occurrence_table::OccurrenceTable;
+use occurrence_table::StringRank;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FmIndex<A, S, C> {
     count: Vec<usize>,
-    occurrence_table: OccurrenceTable<A>,
+    string_rank: StringRank<A>,
     suffix_array: SampledSuffixArray<S, C>,
     text_ids: TexdIdSearchTree,
 }
@@ -26,7 +26,7 @@ pub type FmIndexI32<A> = FmIndex<A, i32, Uncompressed>;
 pub type FmIndexI64<A> = FmIndex<A, i64, Uncompressed>;
 
 impl<A: Alphabet, S: OutputElement + Send + Sync + 'static> FmIndex<A, S, Uncompressed> {
-    // text chars must be smaller than alphabet size + 1 and greater than 0
+    // text chars must be smaller than alphabet size and greater than 0
     // other operations use rayons configured number of threads
     pub fn new<T: AsRef<[u8]>>(
         texts: impl IntoIterator<Item = T>,
@@ -39,11 +39,11 @@ impl<A: Alphabet, S: OutputElement + Send + Sync + 'static> FmIndex<A, S, Uncomp
         let sampled_suffix_array =
             SampledSuffixArray::new_uncompressed(suffix_array, suffix_array_sampling_rate);
 
-        let occurrence_table = OccurrenceTable::construct(&bwt);
+        let occurrence_table = StringRank::construct(&bwt);
 
         FmIndex {
             count,
-            occurrence_table,
+            string_rank: occurrence_table,
             suffix_array: sampled_suffix_array,
             text_ids,
         }
@@ -64,11 +64,11 @@ impl<A: Alphabet> FmIndexU32<A> {
         let sampled_suffix_array =
             SampledSuffixArray::new_u32_compressed(suffix_array, suffix_array_sampling_rate);
 
-        let occurrence_table = OccurrenceTable::construct(&bwt);
+        let occurrence_table = StringRank::construct(&bwt);
 
         FmIndex {
             count,
-            occurrence_table,
+            string_rank: occurrence_table,
             suffix_array: sampled_suffix_array,
             text_ids,
         }
@@ -83,39 +83,22 @@ impl<A: Alphabet, S: PrimInt + 'static, C: CompressionMode> FmIndex<A, S, C> {
 
     // returns half open interval [start, end)
     fn search_suffix_array_interval(&self, query: &[u8]) -> (usize, usize) {
-        let (mut start, mut end) = (0, self.occurrence_table.text_len());
+        let (mut start, mut end) = (0, self.string_rank.len());
 
         for &character in query.iter().rev() {
-            let rank = A::TO_RANK_TRANSLATION_TABLE[character as usize];
-            assert!(rank != 255);
+            let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[character as usize];
+            assert!(symbol != 255);
 
             // it is assumed that the query doesn't contain the sentinel
-            start = self.lf_mapping_step_no_sentinel(rank, start);
-            end = self.lf_mapping_step_no_sentinel(rank, end);
+            start = self.lf_mapping_step(symbol, start);
+            end = self.lf_mapping_step(symbol, end);
         }
 
         (start, end)
     }
 
-    fn lf_mapping_step(&self, rank: u8, idx: usize) -> usize {
-        self.count[rank as usize] + self.occurrences(rank, idx)
-    }
-
-    fn lf_mapping_step_no_sentinel(&self, rank: u8, idx: usize) -> usize {
-        self.count[rank as usize] + self.occurrence_table.occurrences(rank, idx)
-    }
-
-    fn occurrences(&self, rank: u8, idx: usize) -> usize {
-        if rank == 0 {
-            if idx == self.occurrence_table.text_len() {
-                self.text_ids.num_texts()
-            } else {
-                // text id is actually exactly the number of occurrences
-                self.text_ids.lookup_text_id(idx)
-            }
-        } else {
-            self.occurrence_table.occurrences(rank, idx)
-        }
+    fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
+        self.count[symbol as usize] + self.string_rank.rank(symbol, idx)
     }
 }
 
@@ -150,7 +133,7 @@ fn create_data_structures<A: Alphabet, S: OutputElement + Send + Sync + 'static,
     suffix_array_construction_thread_count: u16,
 ) -> (Vec<usize>, Vec<S>, Vec<u8>, TexdIdSearchTree) {
     let (text, mut frequency_table, sentinel_indices) =
-        alphabet::create_concatenated_rank_text(texts, &A::TO_RANK_TRANSLATION_TABLE);
+        alphabet::create_concatenated_rank_text(texts, &A::DENSE_ENCODING_TRANSLATION_TABLE);
 
     let text_ids = TexdIdSearchTree::new_from_sentinel_indices(sentinel_indices);
 
