@@ -7,13 +7,13 @@ type OccurrenceColumn<T> = Vec<T>;
 // parallel construction?
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
-pub(crate) struct StringRank<A> {
+pub struct StringRank<A> {
     data: Vec<OccurrenceColumn<usize>>,
     _alphabet_maker: PhantomData<A>,
 }
 
 impl<A: Alphabet> StringRank<A> {
-    pub(crate) fn construct(bwt: &[u8]) -> Self {
+    pub fn construct(bwt: &[u8]) -> Self {
         let mut data = Vec::new();
 
         for symbol in 0..A::size() {
@@ -26,13 +26,12 @@ impl<A: Alphabet> StringRank<A> {
         }
     }
 
-    // rank should not be zero
     // occurrences of the character in bwt[0, idx)
-    pub(crate) fn rank(&self, symbol: u8, idx: usize) -> usize {
+    pub fn rank(&self, symbol: u8, idx: usize) -> usize {
         self.data[symbol as usize][idx]
     }
 
-    pub(crate) fn symbol_at(&self, idx: usize) -> u8 {
+    pub fn symbol_at(&self, idx: usize) -> u8 {
         for (symbol, column) in self.data.iter().enumerate() {
             if column[idx] < column[idx + 1] {
                 return symbol as u8;
@@ -42,7 +41,7 @@ impl<A: Alphabet> StringRank<A> {
         unreachable!()
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn string_len(&self) -> usize {
         self.data.first().unwrap().len() - 1
     }
 }

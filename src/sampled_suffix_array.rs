@@ -1,63 +1,74 @@
+use bytemuck::Pod;
+use libsais::OutputElement;
 use num_traits::{NumCast, PrimInt};
 
 use std::{marker::PhantomData, ops::Range};
 
-use crate::{U32Compressed, Uncompressed, alphabet::Alphabet};
+use crate::alphabet::Alphabet;
 
 use super::FmIndex;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub(crate) struct SampledSuffixArray<S, C> {
-    data: Vec<S>,
+pub(crate) struct SampledSuffixArray<I> {
+    suffix_array_bytes: Vec<u8>,
     sampling_rate: usize,
-    _compression_marker: PhantomData<C>,
+    _compression_marker: PhantomData<I>,
 }
 
-impl<S: PrimInt + 'static> SampledSuffixArray<S, Uncompressed> {
-    pub(crate) fn new_uncompressed(mut full_suffix_array: Vec<S>, sampling_rate: usize) -> Self {
+impl<I: OutputElement> SampledSuffixArray<I> {
+    pub(crate) fn new_uncompressed(mut suffix_array_bytes: Vec<u8>, sampling_rate: usize) -> Self {
+        let suffix_array_view: &mut [I] = bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+
         let mut num_retained_values = 0;
         let mut write_index = 0;
 
-        for i in 0..full_suffix_array.len() {
+        for i in 0..suffix_array_view.len() {
             if i % sampling_rate == 0 {
-                full_suffix_array[write_index] = full_suffix_array[i];
+                suffix_array_view[write_index] = suffix_array_view[i];
                 write_index += 1;
                 num_retained_values += 1;
             }
         }
 
-        full_suffix_array.truncate(num_retained_values);
-        full_suffix_array.shrink_to_fit();
+        suffix_array_bytes.truncate(num_retained_values * size_of::<I>());
+        suffix_array_bytes.shrink_to_fit();
 
         Self {
-            data: full_suffix_array,
+            suffix_array_bytes,
             sampling_rate,
             _compression_marker: PhantomData,
         }
     }
 }
 
-impl SampledSuffixArray<i64, U32Compressed> {
+impl SampledSuffixArray<u32> {
     pub(crate) fn new_u32_compressed(
-        mut full_suffix_array: Vec<i64>,
+        mut suffix_array_bytes: Vec<u8>,
         sampling_rate: usize,
     ) -> Self {
+        let suffix_array_view: &mut [i64] = bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+
         let mut num_retained_values: usize = 0;
 
         let mut write_index = 0;
         let mut next_write_is_little_half = true;
 
-        for i in 0..full_suffix_array.len() {
+        for i in 0..suffix_array_view.len() {
             if i % sampling_rate == 0 {
+                let read_entry_bytes = suffix_array_view[i].to_le_bytes();
+
                 if next_write_is_little_half {
-                    full_suffix_array[write_index] = full_suffix_array[i];
+                    let mut new_write_entry_bytes = [0; 8];
+                    new_write_entry_bytes[0..4].copy_from_slice(&read_entry_bytes[0..4]);
+
+                    suffix_array_view[write_index] = i64::from_le_bytes(new_write_entry_bytes);
+
                     next_write_is_little_half = false;
                 } else {
-                    let read_bytes = full_suffix_array[i].to_le_bytes();
-                    let mut existing_bytes = full_suffix_array[write_index].to_le_bytes();
-                    existing_bytes[4..8].copy_from_slice(&read_bytes[0..4]);
+                    let mut existing_bytes = suffix_array_view[write_index].to_le_bytes();
+                    existing_bytes[4..8].copy_from_slice(&read_entry_bytes[0..4]);
 
-                    full_suffix_array[write_index] = i64::from_le_bytes(existing_bytes);
+                    suffix_array_view[write_index] = i64::from_le_bytes(existing_bytes);
 
                     next_write_is_little_half = true;
                     write_index += 1;
@@ -67,64 +78,36 @@ impl SampledSuffixArray<i64, U32Compressed> {
             }
         }
 
-        full_suffix_array.truncate(num_retained_values.div_ceil(2));
-        full_suffix_array.shrink_to_fit();
+        suffix_array_bytes.truncate(num_retained_values * size_of::<u32>());
+        suffix_array_bytes.shrink_to_fit();
 
         Self {
-            data: full_suffix_array,
+            suffix_array_bytes,
             sampling_rate,
             _compression_marker: PhantomData,
         }
     }
 }
 
-impl<S: PrimInt + 'static> SampledSuffixArray<S, Uncompressed> {
+impl<I: PrimInt + Pod> SampledSuffixArray<I> {
     pub(crate) fn recover_range_uncompressed<A: Alphabet>(
         &self,
         range: Range<usize>,
-        index: &FmIndex<A, S, Uncompressed>,
-    ) -> impl Iterator<Item = S> {
+        index: &FmIndex<A, I>,
+    ) -> impl Iterator<Item = usize> {
         range.map(|mut i| {
-            let mut num_steps_done = S::zero();
+            let mut num_steps_done = I::zero();
 
             while i % self.sampling_rate != 0 {
                 let bwt_rank = index.string_rank.symbol_at(i);
                 i = index.lf_mapping_step(bwt_rank, i);
-                num_steps_done = num_steps_done + S::one();
+                num_steps_done = num_steps_done + I::one();
             }
 
-            (self.data[i / self.sampling_rate] + num_steps_done)
-                % <S as NumCast>::from(index.string_rank.len()).unwrap()
-        })
-    }
-}
-
-impl SampledSuffixArray<i64, U32Compressed> {
-    pub(crate) fn recover_range_u32_compressed<A: Alphabet>(
-        &self,
-        range: Range<usize>,
-        index: &FmIndex<A, i64, U32Compressed>,
-    ) -> impl Iterator<Item = u32> {
-        range.map(|mut i| {
-            let mut num_steps_done = 0;
-
-            while i % self.sampling_rate != 0 {
-                let bwt_rank = index.string_rank.symbol_at(i);
-                i = index.lf_mapping_step(bwt_rank, i);
-                num_steps_done += 1;
-            }
-
-            let original_index = i / self.sampling_rate;
-            let compressed_index = original_index / 2;
-
-            let bytes = self.data[compressed_index].to_le_bytes();
-            let extracted_data = if original_index % 2 == 0 {
-                u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
-            } else {
-                u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]])
-            };
-
-            (extracted_data + num_steps_done) % u32::try_from(index.string_rank.len()).unwrap()
+            let suffix_array_view: &[I] = bytemuck::cast_slice(&self.suffix_array_bytes);
+            <usize as NumCast>::from(suffix_array_view[i / self.sampling_rate] + num_steps_done)
+                .unwrap()
+                % index.string_rank.string_len()
         })
     }
 }

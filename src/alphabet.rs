@@ -189,7 +189,7 @@ impl Alphabet for AsciiDnaIupacAsDnaWithN {
     }
 }
 
-pub(crate) fn create_concatenated_rank_text<S: OutputElement + Sync + Send, T: AsRef<[u8]>>(
+pub(crate) fn create_concatenated_densely_encoded_text<S: OutputElement, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
     translation_table: &[u8; 256],
 ) -> (Vec<u8>, Vec<S>, Vec<usize>) {
@@ -256,7 +256,7 @@ mod tests {
     fn concat_text() {
         let texts = [b"cccaaagggttt".as_slice(), b"acgtacgtacgt"];
         let (text, frequency_table, sentinel_indices) =
-            create_concatenated_rank_text::<i32, _>(texts, &ASCII_DNA_TRANSLATION_TABLE);
+            create_concatenated_densely_encoded_text::<i32, _>(texts, &ASCII_DNA_TRANSLATION_TABLE);
 
         assert_eq!(
             text,
