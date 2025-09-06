@@ -1,4 +1,4 @@
-use genedex::{FmIndexI32, FmIndexU32, alphabet::AsciiDna};
+use genedex::{FmIndexI32, FmIndexU32, Hit, alphabet::AsciiDna};
 use std::collections::HashSet;
 
 fn create_index() -> FmIndexI32<AsciiDna> {
@@ -26,8 +26,19 @@ fn basic_search() {
     let results: HashSet<_> = index.locate(BASIC_QUERY).collect();
     let results_u32_compressed: HashSet<_> = index_u32_compressed.locate(BASIC_QUERY).collect();
 
-    assert_eq!(results, HashSet::from_iter([(0, 6), (0, 7)]));
-    assert_eq!(results_u32_compressed, HashSet::from_iter([(0, 6), (0, 7)]));
+    let expected_results = HashSet::from_iter([
+        Hit {
+            text_id: 0,
+            position: 6,
+        },
+        Hit {
+            text_id: 0,
+            position: 7,
+        },
+    ]);
+
+    assert_eq!(results, expected_results);
+    assert_eq!(results_u32_compressed, expected_results);
 }
 
 #[test]
@@ -38,11 +49,23 @@ fn text_front_search() {
     let results: HashSet<_> = index.locate(FRONT_QUERY).collect();
     let results_u32_compressed: HashSet<_> = index_u32_compressed.locate(FRONT_QUERY).collect();
 
-    assert_eq!(results, HashSet::from_iter([(0, 0), (0, 1), (0, 2)]));
-    assert_eq!(
-        results_u32_compressed,
-        HashSet::from_iter([(0, 0), (0, 1), (0, 2)])
-    );
+    let expected_results = HashSet::from_iter([
+        Hit {
+            text_id: 0,
+            position: 0,
+        },
+        Hit {
+            text_id: 0,
+            position: 1,
+        },
+        Hit {
+            text_id: 0,
+            position: 2,
+        },
+    ]);
+
+    assert_eq!(results, expected_results);
+    assert_eq!(results_u32_compressed, expected_results);
 }
 
 #[test]
@@ -63,12 +86,39 @@ fn search_multitext() {
 
     let index = FmIndexU32::<AsciiDna>::new_u32_compressed(texts, 1, 3);
 
+    let expected_results_basic_query = HashSet::from_iter([
+        Hit {
+            text_id: 0,
+            position: 6,
+        },
+        Hit {
+            text_id: 0,
+            position: 7,
+        },
+    ]);
+
     let results_basic_query: HashSet<_> = index.locate(BASIC_QUERY).collect();
-    assert_eq!(results_basic_query, HashSet::from_iter([(0, 6), (0, 7)]));
+    assert_eq!(results_basic_query, expected_results_basic_query);
+
+    let expected_results_multi_query = HashSet::from_iter([
+        Hit {
+            text_id: 0,
+            position: 8,
+        },
+        Hit {
+            text_id: 1,
+            position: 2,
+        },
+        Hit {
+            text_id: 1,
+            position: 6,
+        },
+        Hit {
+            text_id: 1,
+            position: 10,
+        },
+    ]);
 
     let results_multi_query: HashSet<_> = index.locate(MULTI_QUERY).collect();
-    assert_eq!(
-        results_multi_query,
-        HashSet::from_iter([(0, 8), (1, 2), (1, 6), (1, 10)])
-    );
+    assert_eq!(results_multi_query, expected_results_multi_query);
 }

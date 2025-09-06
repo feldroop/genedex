@@ -27,6 +27,12 @@ pub struct FmIndex<A, I, B = Block512> {
     _alphabet_marker: PhantomData<A>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Hit {
+    pub text_id: usize,
+    pub position: usize,
+}
+
 pub type FmIndexI32<A, B = Block512> = FmIndex<A, i32, B>;
 pub type FmIndexU32<A, B = Block512> = FmIndex<A, u32, B>;
 pub type FmIndexI64<A, B = Block512> = FmIndex<A, i64, B>;
@@ -89,14 +95,17 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
         end - start
     }
 
-    pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = (usize, usize)> {
+    pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = Hit> {
         let (start, end) = self.search_suffix_array_interval(query);
 
         self.suffix_array
             .recover_range_uncompressed(start..end, self)
             .map(|idx| {
-                self.text_ids
-                    .backtransfrom_concatenated_text_index(<usize as NumCast>::from(idx).unwrap())
+                let (text_id, position) = self
+                    .text_ids
+                    .backtransfrom_concatenated_text_index(<usize as NumCast>::from(idx).unwrap());
+
+                Hit { text_id, position }
             })
     }
 
