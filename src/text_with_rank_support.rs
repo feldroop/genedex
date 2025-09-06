@@ -1,0 +1,375 @@
+use std::ops::{Deref, DerefMut};
+
+use bitvec::prelude::*;
+use num_traits::{NumCast, PrimInt};
+use rayon::prelude::*;
+
+// Interleaved means that the values for different symbols
+// for the same text position are next to each other.
+// Blocks must be interleaved for efficient queries.
+// (Super)block offsets are only interleaved for faster (parallel) construction.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug)]
+pub struct TextWithRankSupport<I, B = Block512> {
+    text_len: usize,
+    alphabet_size: usize,
+    interleaved_blocks: Vec<B>,
+    interleaved_block_offsets: Vec<u16>,
+    interleaved_superblock_offsets: Vec<I>,
+}
+
+impl<I: PrimInt + Send + Sync, B: Block> TextWithRankSupport<I, B> {
+    pub fn construct(text: &[u8], alphabet_size: usize) -> Self {
+        let alphabet_num_bits = ilog2_ceil(alphabet_size);
+        let len: usize = text.len() + 1;
+        let superblock_size = u16::MAX as usize + 1;
+
+        let num_indicator_blocks = len.div_ceil(B::NUM_BITS) * alphabet_num_bits;
+        let num_block_offsets = len.div_ceil(B::NUM_BITS) * alphabet_size;
+        let num_superblock_offsets = len.div_ceil(superblock_size) * alphabet_size;
+
+        let mut interleaved_blocks = vec![B::zeroes(); num_indicator_blocks];
+        let mut interleaved_block_offsets = vec![0; num_block_offsets];
+        let mut interleaved_superblock_offsets = vec![I::zero(); num_superblock_offsets];
+
+        let num_blocks_per_superblock = (superblock_size / B::NUM_BITS) * alphabet_num_bits;
+        let blocks_per_superblock_iter =
+            interleaved_blocks.par_chunks_mut(num_blocks_per_superblock);
+
+        let num_block_offsets_per_superblock = (superblock_size / B::NUM_BITS) * alphabet_size;
+        let block_offsets_per_superblock_iter =
+            interleaved_block_offsets.par_chunks_mut(num_block_offsets_per_superblock);
+
+        let superblock_offsets_iter = interleaved_superblock_offsets.par_chunks_mut(alphabet_size);
+
+        let text_superblock_iter = text.par_chunks(superblock_size);
+
+        let interleaved_superblock_iter = (
+            text_superblock_iter,
+            superblock_offsets_iter,
+            block_offsets_per_superblock_iter,
+            blocks_per_superblock_iter,
+        )
+            .into_par_iter();
+
+        interleaved_superblock_iter
+            .for_each(|tup| fill_superblock::<I, B>(tup.0, tup.1, tup.2, tup.3, alphabet_size));
+
+        // accumulate superblocks in single thread
+        let mut temp_offsets = vec![I::zero(); alphabet_size];
+        let mut sum_of_previous = vec![I::zero(); alphabet_size];
+
+        for superblock_offsets in interleaved_superblock_offsets.chunks_mut(alphabet_size) {
+            temp_offsets.copy_from_slice(superblock_offsets);
+            superblock_offsets.copy_from_slice(&sum_of_previous);
+
+            for (sum, temp) in sum_of_previous.iter_mut().zip(&temp_offsets) {
+                *sum = *sum + *temp;
+            }
+        }
+
+        Self {
+            text_len: text.len(),
+            alphabet_size,
+            interleaved_blocks,
+            interleaved_block_offsets,
+            interleaved_superblock_offsets,
+        }
+    }
+}
+
+impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
+    // number of occurrences of the symbol in text[0..idx]
+    pub fn rank(&self, symbol: u8, idx: usize) -> usize {
+        let symbol_usize = symbol as usize;
+        let alphabet_num_bits = ilog2_ceil(self.alphabet_size);
+
+        let superblock_size = u16::MAX as usize + 1;
+        let superblock_offset_index = (idx / superblock_size) * self.alphabet_size + symbol_usize;
+        let superblock_offset = self.interleaved_superblock_offsets[superblock_offset_index];
+        let superblock_offset = <usize as NumCast>::from(superblock_offset).unwrap();
+
+        let block_offset_index = (idx / B::NUM_BITS) * self.alphabet_size;
+        let block_offset = self.interleaved_block_offsets[block_offset_index] as usize;
+
+        let interleaved_blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
+        let interleaved_blocks_end = interleaved_blocks_start + alphabet_num_bits;
+
+        let interleaved_blocks =
+            &self.interleaved_blocks[interleaved_blocks_start..interleaved_blocks_end];
+
+        let mut accumulator_block = B::ones();
+        let symbol_bits = symbol.view_bits::<Lsb0>();
+
+        for (mut block, symbol_bit) in interleaved_blocks.iter().copied().zip(symbol_bits) {
+            if !symbol_bit {
+                block.negate();
+            }
+
+            accumulator_block.set_to_self_and(block);
+        }
+
+        let index_in_block = idx % B::NUM_BITS;
+        accumulator_block[index_in_block..].fill(false);
+        let block_count = accumulator_block.count_ones();
+
+        superblock_offset + block_offset + block_count
+    }
+
+    pub fn symbol_at(&self, idx: usize) -> u8 {
+        let mut symbol = 0;
+
+        let alphabet_num_bits = ilog2_ceil(self.alphabet_size);
+        let blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
+        let blocks_end = blocks_start + alphabet_num_bits;
+
+        let blocks = &self.interleaved_blocks[blocks_start..blocks_end];
+
+        let index_in_block = idx % B::NUM_BITS;
+        let symbol_bits = symbol.view_bits_mut::<Lsb0>();
+
+        for (block, mut bit) in blocks.iter().zip(symbol_bits) {
+            bit.set(block[index_in_block]);
+        }
+
+        symbol
+    }
+
+    pub fn text_len(&self) -> usize {
+        self.text_len
+    }
+}
+
+fn fill_superblock<I: PrimInt, B: Block>(
+    text: &[u8],
+    interleaved_superblock_offsets: &mut [I],
+    interleaved_block_offsets: &mut [u16],
+    interleaved_blocks: &mut [B],
+    alphabet_size: usize,
+) {
+    let alphabet_num_bits = ilog2_ceil(alphabet_size);
+    let mut block_offsets_sum = vec![0; alphabet_size];
+
+    let text_block_iter = text.chunks(B::NUM_BITS);
+    let block_offsets_iter = interleaved_block_offsets.chunks_mut(alphabet_size);
+    let blocks_iter = interleaved_blocks.chunks_mut(alphabet_num_bits);
+
+    let block_package_iter = text_block_iter.zip(block_offsets_iter).zip(blocks_iter);
+
+    for ((text_block, block_offsets), blocks) in block_package_iter {
+        block_offsets.copy_from_slice(&block_offsets_sum);
+
+        for (index_in_block, symbol) in text_block.iter().copied().enumerate() {
+            let symbol_usize = <usize as NumCast>::from(symbol).unwrap();
+
+            let superblock_count = &mut interleaved_superblock_offsets[symbol_usize];
+            *superblock_count = *superblock_count + I::one();
+
+            block_offsets_sum[symbol_usize] += 1;
+
+            let symbol_bits = symbol.view_bits::<Lsb0>();
+
+            for (block, bit) in blocks.iter_mut().zip(symbol_bits) {
+                block.set(index_in_block, *bit);
+            }
+        }
+    }
+}
+
+// this distinction of block types only exists to be able to set repr(align(64)) only for the 512 bit block
+pub trait Block:
+    sealed::Sealed + Clone + Copy + Send + Sync + Deref<Target = BitSlice<u64>> + DerefMut
+{
+    const NUM_BITS: usize;
+    const NUM_BYTES: usize = Self::NUM_BITS / 8;
+
+    fn zeroes() -> Self;
+    fn ones() -> Self;
+
+    fn negate(&mut self);
+    fn set_to_self_and(&mut self, other: Self);
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(align(64))]
+pub struct Block512 {
+    data: BitArray<[u64; 8]>,
+}
+
+impl sealed::Sealed for Block512 {}
+
+impl Deref for Block512 {
+    type Target = BitSlice<u64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for Block512 {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
+impl Block for Block512 {
+    const NUM_BITS: usize = 512;
+
+    fn zeroes() -> Self {
+        Self {
+            data: BitArray::ZERO,
+        }
+    }
+
+    fn ones() -> Self {
+        Self {
+            data: BitArray::new([u64::MAX; 8]),
+        }
+    }
+
+    fn negate(&mut self) {
+        for store in self.data.as_raw_mut_slice() {
+            *store = !(*store);
+        }
+    }
+
+    fn set_to_self_and(&mut self, other: Self) {
+        for (store, other_store) in self
+            .data
+            .as_raw_mut_slice()
+            .iter_mut()
+            .zip(other.data.as_raw_slice())
+        {
+            *store &= other_store;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Block64 {
+    data: BitArray<u64>,
+}
+
+impl sealed::Sealed for Block64 {}
+
+impl Block for Block64 {
+    const NUM_BITS: usize = 64;
+
+    fn zeroes() -> Self {
+        Self {
+            data: BitArray::ZERO,
+        }
+    }
+
+    fn ones() -> Self {
+        Self {
+            data: BitArray::new(u64::MAX),
+        }
+    }
+
+    fn negate(&mut self) {
+        self.data = BitArray::new(!self.data.into_inner());
+    }
+
+    fn set_to_self_and(&mut self, other: Self) {
+        self.data = BitArray::new(self.data.into_inner() & other.data.into_inner());
+    }
+}
+
+impl Deref for Block64 {
+    type Target = BitSlice<u64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for Block64 {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
+fn ilog2_ceil(value: usize) -> usize {
+    if value.is_power_of_two() {
+        value.ilog2() as usize
+    } else {
+        (value.ilog2() + 1) as usize
+    }
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    type OccurrenceColumn<T> = Vec<T>;
+
+    #[derive(Debug)]
+    struct NaiveTextWithRankSupport {
+        data: Vec<OccurrenceColumn<usize>>,
+    }
+
+    impl NaiveTextWithRankSupport {
+        pub fn construct(text: &[u8], alphabet_size: usize) -> Self {
+            let mut data = Vec::new();
+
+            for symbol in 0..alphabet_size {
+                data.push(create_occurrence_column(symbol as u8, text));
+            }
+
+            Self { data }
+        }
+
+        // occurrences of the character in bwt[0, idx)
+        pub fn rank(&self, symbol: u8, idx: usize) -> usize {
+            self.data[symbol as usize][idx]
+        }
+    }
+
+    fn create_occurrence_column(target_symbol: u8, bwt: &[u8]) -> Vec<usize> {
+        let mut column = Vec::with_capacity(bwt.len() + 1);
+
+        let mut count = 0;
+        column.push(count);
+
+        for &r in bwt {
+            if r == target_symbol {
+                count += 1;
+            }
+
+            column.push(count);
+        }
+
+        column
+    }
+
+    #[test]
+    fn basic() {
+        let alphabet_size = 5;
+        let text = [
+            0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 1, 2, 3, 4, 3, 2, 1, 0,
+        ];
+
+        let text_rank = TextWithRankSupport::<i32>::construct(&text, alphabet_size);
+        let naive_text_rank = NaiveTextWithRankSupport::construct(&text, alphabet_size);
+
+        assert_eq!(text_rank.text_len, text.len());
+
+        for (i, symbol) in text.iter().copied().enumerate() {
+            assert_eq!(text_rank.symbol_at(i), symbol);
+        }
+
+        for symbol in 0..alphabet_size as u8 {
+            for idx in 0..=text.len() {
+                assert_eq!(
+                    text_rank.rank(symbol, idx),
+                    naive_text_rank.rank(symbol, idx)
+                );
+            }
+        }
+    }
+}

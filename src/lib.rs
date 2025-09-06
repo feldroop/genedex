@@ -1,32 +1,37 @@
 pub mod alphabet;
+pub mod text_with_rank_support;
 
 mod sampled_suffix_array;
-pub mod string_rank;
 mod text_id_search_tree;
+
+use std::marker::PhantomData;
 
 use bytemuck::Pod;
 use libsais::{OutputElement, ThreadCount};
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 
-use alphabet::Alphabet;
+pub use alphabet::Alphabet;
+pub use text_with_rank_support::TextWithRankSupport;
+use text_with_rank_support::{Block, Block512};
+
 use sampled_suffix_array::SampledSuffixArray;
-use string_rank::StringRank;
 use text_id_search_tree::TexdIdSearchTree;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct FmIndex<A, I> {
+pub struct FmIndex<A, I, B = Block512> {
     count: Vec<usize>,
-    string_rank: StringRank<A>,
+    text_with_rank_support: TextWithRankSupport<I, B>,
     suffix_array: SampledSuffixArray<I>,
     text_ids: TexdIdSearchTree,
+    _alphabet_marker: PhantomData<A>,
 }
 
-pub type FmIndexI32<A> = FmIndex<A, i32>;
-pub type FmIndexU32<A> = FmIndex<A, u32>;
-pub type FmIndexI64<A> = FmIndex<A, i64>;
+pub type FmIndexI32<A, B = Block512> = FmIndex<A, i32, B>;
+pub type FmIndexU32<A, B = Block512> = FmIndex<A, u32, B>;
+pub type FmIndexI64<A, B = Block512> = FmIndex<A, i64, B>;
 
-impl<A: Alphabet, I: OutputElement> FmIndex<A, I> {
+impl<A: Alphabet, I: OutputElement, B: Block> FmIndex<A, I, B> {
     // text chars must be smaller than alphabet size and greater than 0
     // other operations use rayons configured number of threads
     pub fn new<T: AsRef<[u8]>>(
@@ -40,18 +45,19 @@ impl<A: Alphabet, I: OutputElement> FmIndex<A, I> {
         let sampled_suffix_array =
             SampledSuffixArray::new_uncompressed(suffix_array_bytes, suffix_array_sampling_rate);
 
-        let occurrence_table = StringRank::construct(&bwt);
+        let occurrence_table = TextWithRankSupport::construct(&bwt, A::SIZE);
 
         FmIndex {
             count,
-            string_rank: occurrence_table,
+            text_with_rank_support: occurrence_table,
             suffix_array: sampled_suffix_array,
             text_ids,
+            _alphabet_marker: PhantomData,
         }
     }
 }
 
-impl<A: Alphabet> FmIndexU32<A> {
+impl<A: Alphabet, B: Block> FmIndex<A, u32, B> {
     // text chars must be smaller than alphabet size + 1 and greater than 0
     // other operations use rayons configured number of threads
     pub fn new_u32_compressed<T: AsRef<[u8]>>(
@@ -65,18 +71,19 @@ impl<A: Alphabet> FmIndexU32<A> {
         let sampled_suffix_array =
             SampledSuffixArray::new_u32_compressed(suffix_array_bytes, suffix_array_sampling_rate);
 
-        let occurrence_table = StringRank::construct(&bwt);
+        let occurrence_table = TextWithRankSupport::construct(&bwt, A::SIZE);
 
         FmIndex {
             count,
-            string_rank: occurrence_table,
+            text_with_rank_support: occurrence_table,
             suffix_array: sampled_suffix_array,
             text_ids,
+            _alphabet_marker: PhantomData,
         }
     }
 }
 
-impl<A: Alphabet, I: PrimInt + Pod + 'static> FmIndex<A, I> {
+impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
     pub fn count(&self, query: &[u8]) -> usize {
         let (start, end) = self.search_suffix_array_interval(query);
         end - start
@@ -95,7 +102,7 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static> FmIndex<A, I> {
 
     // returns half open interval [start, end)
     fn search_suffix_array_interval(&self, query: &[u8]) -> (usize, usize) {
-        let (mut start, mut end) = (0, self.string_rank.string_len());
+        let (mut start, mut end) = (0, self.text_with_rank_support.text_len());
 
         for &character in query.iter().rev() {
             let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[character as usize];
@@ -110,7 +117,7 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static> FmIndex<A, I> {
     }
 
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
-        self.count[symbol as usize] + self.string_rank.rank(symbol, idx)
+        self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
     }
 }
 
@@ -119,14 +126,11 @@ fn create_data_structures<A: Alphabet, I: OutputElement, T: AsRef<[u8]>>(
     suffix_array_construction_thread_count: u16,
 ) -> (Vec<usize>, Vec<u8>, Vec<u8>, TexdIdSearchTree) {
     let (text, mut frequency_table, sentinel_indices) =
-        alphabet::create_concatenated_densely_encoded_text(
-            texts,
-            &A::DENSE_ENCODING_TRANSLATION_TABLE,
-        );
+        create_concatenated_densely_encoded_text(texts, &A::DENSE_ENCODING_TRANSLATION_TABLE);
 
     let text_ids = TexdIdSearchTree::new_from_sentinel_indices(sentinel_indices);
 
-    let count = frequencies_to_cumulative_count_vector(&frequency_table, A::size());
+    let count = frequency_table_to_count(&frequency_table, A::SIZE);
 
     // allocate the buffer in bytes, because maybe we want to muck around with integer types later (compress i64 into u32)
     let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<I>()];
@@ -149,7 +153,66 @@ fn create_data_structures<A: Alphabet, I: OutputElement, T: AsRef<[u8]>>(
     (count, suffix_array_bytes, bwt, text_ids)
 }
 
-fn frequencies_to_cumulative_count_vector<S: OutputElement>(
+fn create_concatenated_densely_encoded_text<S: OutputElement, T: AsRef<[u8]>>(
+    texts: impl IntoIterator<Item = T>,
+    translation_table: &[u8; 256],
+) -> (Vec<u8>, Vec<S>, Vec<usize>) {
+    // this generic texts owned vec is needed for the as_ref interface
+    let generic_texts: Vec<_> = texts.into_iter().collect();
+    let texts: Vec<&[u8]> = generic_texts.iter().map(|t| t.as_ref()).collect();
+    let num_texts = texts.len();
+
+    let needed_capacity = texts.iter().map(|t| t.len()).sum::<usize>() + num_texts;
+
+    let sentinel_indices: Vec<_> = texts
+        .iter()
+        .scan(0, |state, t| {
+            let temp = *state + t.len();
+            *state += t.len() + 1;
+            Some(temp)
+        })
+        .collect();
+
+    let mut concatenated_text = vec![0; needed_capacity];
+    let mut concatenated_text_splits = Vec::with_capacity(num_texts);
+    let mut remaining_slice = concatenated_text.as_mut_slice();
+
+    for t in texts.iter() {
+        let (this, remaining) = remaining_slice.split_at_mut(t.len() + 1);
+        concatenated_text_splits.push(this);
+        remaining_slice = remaining;
+    }
+
+    let mut frequency_table = texts
+        .into_par_iter()
+        .zip(concatenated_text_splits)
+        .map(|(text, concatenated_text_split)| {
+            let mut frequency_table = vec![S::zero(); 256];
+
+            for (source, target) in text.iter().zip(concatenated_text_split) {
+                *target = translation_table[*source as usize];
+                frequency_table[*target as usize] = frequency_table[*target as usize] + S::one();
+            }
+
+            frequency_table
+        })
+        .reduce_with(merge_frequency_tables)
+        .expect("There should be at least one texts");
+
+    frequency_table[0] = <S as NumCast>::from(num_texts).unwrap();
+
+    (concatenated_text, frequency_table, sentinel_indices)
+}
+
+fn merge_frequency_tables<S: OutputElement>(mut f1: Vec<S>, f2: Vec<S>) -> Vec<S> {
+    for (x1, x2) in f1.iter_mut().zip(f2) {
+        *x1 = *x1 + x2;
+    }
+
+    f1
+}
+
+fn frequency_table_to_count<S: OutputElement>(
     frequency_table: &[S],
     alphabet_size: usize,
 ) -> Vec<usize> {
@@ -198,16 +261,44 @@ mod tests {
 
     use super::*;
 
-    fn create_index() -> FmIndex<AsciiDna, i32> {
-        let text = b"cccaaagggttt".as_slice();
+    #[test]
+    fn concat_text() {
+        let texts = [b"cccaaagggttt".as_slice(), b"acgtacgtacgt"];
+        let (text, frequency_table, sentinel_indices) =
+            create_concatenated_densely_encoded_text::<i32, _>(
+                texts,
+                &alphabet::ASCII_DNA_TRANSLATION_TABLE,
+            );
 
-        FmIndexI32::new([text], 1, 3)
+        assert_eq!(
+            text,
+            [
+                2, 2, 2, 1, 1, 1, 3, 3, 3, 4, 4, 4, 0, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 0
+            ]
+        );
+
+        assert_eq!(&sentinel_indices, &[12, 25]);
+
+        let mut expected_frequency_table = vec![0; 256];
+        expected_frequency_table[0] = 2;
+        expected_frequency_table[1] = 6;
+        expected_frequency_table[2] = 6;
+        expected_frequency_table[3] = 6;
+        expected_frequency_table[4] = 6;
+
+        assert_eq!(expected_frequency_table, frequency_table);
     }
 
-    fn create_index_u32_compressed() -> FmIndex<AsciiDna, u32> {
+    fn create_index() -> FmIndexI32<AsciiDna> {
         let text = b"cccaaagggttt".as_slice();
 
-        FmIndexU32::new_u32_compressed([text], 1, 3)
+        FmIndex::new([text], 1, 3)
+    }
+
+    fn create_index_u32_compressed() -> FmIndexU32<AsciiDna> {
+        let text = b"cccaaagggttt".as_slice();
+
+        FmIndex::new_u32_compressed([text], 1, 3)
     }
 
     static BASIC_QUERY: &[u8] = b"gg";

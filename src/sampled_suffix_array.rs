@@ -4,7 +4,7 @@ use num_traits::{NumCast, PrimInt};
 
 use std::{marker::PhantomData, ops::Range};
 
-use crate::alphabet::Alphabet;
+use crate::{alphabet::Alphabet, text_with_rank_support::Block};
 
 use super::FmIndex;
 
@@ -90,16 +90,16 @@ impl SampledSuffixArray<u32> {
 }
 
 impl<I: PrimInt + Pod> SampledSuffixArray<I> {
-    pub(crate) fn recover_range_uncompressed<A: Alphabet>(
+    pub(crate) fn recover_range_uncompressed<A: Alphabet, B: Block>(
         &self,
         range: Range<usize>,
-        index: &FmIndex<A, I>,
+        index: &FmIndex<A, I, B>,
     ) -> impl Iterator<Item = usize> {
         range.map(|mut i| {
             let mut num_steps_done = I::zero();
 
             while i % self.sampling_rate != 0 {
-                let bwt_rank = index.string_rank.symbol_at(i);
+                let bwt_rank = index.text_with_rank_support.symbol_at(i);
                 i = index.lf_mapping_step(bwt_rank, i);
                 num_steps_done = num_steps_done + I::one();
             }
@@ -107,7 +107,7 @@ impl<I: PrimInt + Pod> SampledSuffixArray<I> {
             let suffix_array_view: &[I] = bytemuck::cast_slice(&self.suffix_array_bytes);
             <usize as NumCast>::from(suffix_array_view[i / self.sampling_rate] + num_steps_done)
                 .unwrap()
-                % index.string_rank.string_len()
+                % index.text_with_rank_support.text_len()
         })
     }
 }
