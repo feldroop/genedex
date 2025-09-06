@@ -11,6 +11,15 @@ bytemuck = "1.23.2"
 serde = { version = "1.0", features = ["derive"], optional = true}
 bitvec = "1"
 
+[dev-dependencies]
+proptest = "1.6.0"
+rand = "0.9.0"
+rand_chacha = "0.9.0"
+
 [features]
 default = []
 serde = ["dep:serde", "bitvec/serde"]
+
+# optimize code for faster proptesting (needs to be removed when debugging tests)
+[profile.test]
+opt-level = 3

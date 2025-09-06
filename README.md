@@ -1,3 +1,3 @@
-# genedex: a small and fast FM-Index for Rust
+# genedex: A Small and Fast FM-Index for Rust
 
 Coming soon!

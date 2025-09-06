@@ -20,6 +20,8 @@ pub struct TextWithRankSupport<I, B = Block512> {
 
 impl<I: PrimInt + Send + Sync, B: Block> TextWithRankSupport<I, B> {
     pub fn construct(text: &[u8], alphabet_size: usize) -> Self {
+        assert!(alphabet_size >= 2);
+
         let alphabet_num_bits = ilog2_ceil(alphabet_size);
         let len: usize = text.len() + 1;
         let superblock_size = u16::MAX as usize + 1;
@@ -89,7 +91,7 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
         let superblock_offset = self.interleaved_superblock_offsets[superblock_offset_index];
         let superblock_offset = <usize as NumCast>::from(superblock_offset).unwrap();
 
-        let block_offset_index = (idx / B::NUM_BITS) * self.alphabet_size;
+        let block_offset_index = (idx / B::NUM_BITS) * self.alphabet_size + symbol_usize;
         let block_offset = self.interleaved_block_offsets[block_offset_index] as usize;
 
         let interleaved_blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
@@ -154,6 +156,8 @@ fn fill_superblock<I: PrimInt, B: Block>(
     let block_offsets_iter = interleaved_block_offsets.chunks_mut(alphabet_size);
     let blocks_iter = interleaved_blocks.chunks_mut(alphabet_num_bits);
 
+    let text_overshoot = text_block_iter.len() < blocks_iter.len();
+
     let block_package_iter = text_block_iter.zip(block_offsets_iter).zip(blocks_iter);
 
     for ((text_block, block_offsets), blocks) in block_package_iter {
@@ -173,6 +177,15 @@ fn fill_superblock<I: PrimInt, B: Block>(
                 block.as_mut_bitslice().set(index_in_block, *bit);
             }
         }
+    }
+
+    // annoying edge case, because the bit array we're storing is text.len() + 1 large
+    if text_overshoot {
+        interleaved_block_offsets
+            .rchunks_mut(alphabet_size)
+            .next()
+            .unwrap()
+            .copy_from_slice(&block_offsets_sum);
     }
 }
 
@@ -316,76 +329,4 @@ fn ilog2_ceil(value: usize) -> usize {
 
 mod sealed {
     pub trait Sealed {}
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    type OccurrenceColumn<T> = Vec<T>;
-
-    #[derive(Debug)]
-    struct NaiveTextWithRankSupport {
-        data: Vec<OccurrenceColumn<usize>>,
-    }
-
-    impl NaiveTextWithRankSupport {
-        pub fn construct(text: &[u8], alphabet_size: usize) -> Self {
-            let mut data = Vec::new();
-
-            for symbol in 0..alphabet_size {
-                data.push(create_occurrence_column(symbol as u8, text));
-            }
-
-            Self { data }
-        }
-
-        // occurrences of the character in bwt[0, idx)
-        pub fn rank(&self, symbol: u8, idx: usize) -> usize {
-            self.data[symbol as usize][idx]
-        }
-    }
-
-    fn create_occurrence_column(target_symbol: u8, bwt: &[u8]) -> Vec<usize> {
-        let mut column = Vec::with_capacity(bwt.len() + 1);
-
-        let mut count = 0;
-        column.push(count);
-
-        for &r in bwt {
-            if r == target_symbol {
-                count += 1;
-            }
-
-            column.push(count);
-        }
-
-        column
-    }
-
-    #[test]
-    fn basic() {
-        let alphabet_size = 5;
-        let text = [
-            0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 1, 2, 3, 4, 3, 2, 1, 0,
-        ];
-
-        let text_rank = TextWithRankSupport::<i32>::construct(&text, alphabet_size);
-        let naive_text_rank = NaiveTextWithRankSupport::construct(&text, alphabet_size);
-
-        assert_eq!(text_rank.text_len, text.len());
-
-        for (i, symbol) in text.iter().copied().enumerate() {
-            assert_eq!(text_rank.symbol_at(i), symbol);
-        }
-
-        for symbol in 0..alphabet_size as u8 {
-            for idx in 0..=text.len() {
-                assert_eq!(
-                    text_rank.rank(symbol, idx),
-                    naive_text_rank.rank(symbol, idx)
-                );
-            }
-        }
-    }
 }
