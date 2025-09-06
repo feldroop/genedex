@@ -4,7 +4,7 @@ use bitvec::prelude::*;
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 
-// Interleaved means that the values for different symbols
+// Interleaved means that the respective values for different symbols of the alphabet
 // for the same text position are next to each other.
 // Blocks must be interleaved for efficient queries.
 // (Super)block offsets are only interleaved for faster (parallel) construction.
@@ -110,8 +110,8 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
         }
 
         let index_in_block = idx % B::NUM_BITS;
-        accumulator_block[index_in_block..].fill(false);
-        let block_count = accumulator_block.count_ones();
+        accumulator_block.as_mut_bitslice()[index_in_block..].fill(false);
+        let block_count = accumulator_block.as_bitslice().count_ones();
 
         superblock_offset + block_offset + block_count
     }
@@ -129,7 +129,7 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
         let symbol_bits = symbol.view_bits_mut::<Lsb0>();
 
         for (block, mut bit) in blocks.iter().zip(symbol_bits) {
-            bit.set(block[index_in_block]);
+            bit.set(block.as_bitslice()[index_in_block]);
         }
 
         symbol
@@ -170,24 +170,45 @@ fn fill_superblock<I: PrimInt, B: Block>(
             let symbol_bits = symbol.view_bits::<Lsb0>();
 
             for (block, bit) in blocks.iter_mut().zip(symbol_bits) {
-                block.set(index_in_block, *bit);
+                block.as_mut_bitslice().set(index_in_block, *bit);
             }
         }
     }
 }
 
-// this distinction of block types only exists to be able to set repr(align(64)) only for the 512 bit block
-pub trait Block:
-    sealed::Sealed + Clone + Copy + Send + Sync + Deref<Target = BitSlice<u64>> + DerefMut
-{
+// this distinction of block types only exists to be able to set repr(align(64)) for the 512 bit block
+pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
     const NUM_BITS: usize;
     const NUM_BYTES: usize = Self::NUM_BITS / 8;
+    const NUM_U64: usize = Self::NUM_BITS / 64;
 
-    fn zeroes() -> Self;
-    fn ones() -> Self;
+    fn from_init_store(init_store: u64) -> Self;
 
-    fn negate(&mut self);
-    fn set_to_self_and(&mut self, other: Self);
+    fn zeroes() -> Self {
+        Self::from_init_store(0)
+    }
+
+    fn ones() -> Self {
+        Self::from_init_store(u64::MAX)
+    }
+
+    fn as_bitslice(&self) -> &BitSlice<u64>;
+    fn as_mut_bitslice(&mut self) -> &mut BitSlice<u64>;
+
+    fn as_raw_slice(&self) -> &[u64];
+    fn as_raw_mut_slice(&mut self) -> &mut [u64];
+
+    fn negate(&mut self) {
+        for store in self.as_raw_mut_slice() {
+            *store = !(*store);
+        }
+    }
+
+    fn set_to_self_and(&mut self, other: Self) {
+        for (store, other_store) in self.as_raw_mut_slice().iter_mut().zip(other.as_raw_slice()) {
+            *store &= other_store;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -215,33 +236,26 @@ impl DerefMut for Block512 {
 impl Block for Block512 {
     const NUM_BITS: usize = 512;
 
-    fn zeroes() -> Self {
+    fn from_init_store(init_store: u64) -> Self {
         Self {
-            data: BitArray::ZERO,
+            data: BitArray::new([init_store; 8]),
         }
     }
 
-    fn ones() -> Self {
-        Self {
-            data: BitArray::new([u64::MAX; 8]),
-        }
+    fn as_bitslice(&self) -> &BitSlice<u64> {
+        self.data.as_bitslice()
     }
 
-    fn negate(&mut self) {
-        for store in self.data.as_raw_mut_slice() {
-            *store = !(*store);
-        }
+    fn as_mut_bitslice(&mut self) -> &mut BitSlice<u64> {
+        self.data.as_mut_bitslice()
     }
 
-    fn set_to_self_and(&mut self, other: Self) {
-        for (store, other_store) in self
-            .data
-            .as_raw_mut_slice()
-            .iter_mut()
-            .zip(other.data.as_raw_slice())
-        {
-            *store &= other_store;
-        }
+    fn as_raw_slice(&self) -> &[u64] {
+        self.data.as_raw_slice()
+    }
+
+    fn as_raw_mut_slice(&mut self) -> &mut [u64] {
+        self.data.as_raw_mut_slice()
     }
 }
 
@@ -255,24 +269,26 @@ impl sealed::Sealed for Block64 {}
 impl Block for Block64 {
     const NUM_BITS: usize = 64;
 
-    fn zeroes() -> Self {
+    fn from_init_store(init_store: u64) -> Self {
         Self {
-            data: BitArray::ZERO,
+            data: BitArray::new(init_store),
         }
     }
 
-    fn ones() -> Self {
-        Self {
-            data: BitArray::new(u64::MAX),
-        }
+    fn as_bitslice(&self) -> &BitSlice<u64> {
+        self.data.as_bitslice()
     }
 
-    fn negate(&mut self) {
-        self.data = BitArray::new(!self.data.into_inner());
+    fn as_mut_bitslice(&mut self) -> &mut BitSlice<u64> {
+        self.data.as_mut_bitslice()
     }
 
-    fn set_to_self_and(&mut self, other: Self) {
-        self.data = BitArray::new(self.data.into_inner() & other.data.into_inner());
+    fn as_raw_slice(&self) -> &[u64] {
+        self.data.as_raw_slice()
+    }
+
+    fn as_raw_mut_slice(&mut self) -> &mut [u64] {
+        self.data.as_raw_mut_slice()
     }
 }
 
