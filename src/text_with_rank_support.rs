@@ -224,6 +224,7 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 #[repr(align(64))]
 pub struct Block512 {
@@ -258,6 +259,7 @@ impl Block for Block512 {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct Block64 {
     data: u64,
