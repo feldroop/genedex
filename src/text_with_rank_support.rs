@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::slice;
 
 use bitvec::prelude::*;
 use num_traits::{NumCast, PrimInt};
@@ -8,7 +8,7 @@ use rayon::prelude::*;
 // for the same text position are next to each other.
 // Blocks must be interleaved for efficient queries.
 // (Super)block offsets are only interleaved for faster (parallel) construction.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]
 #[derive(Debug)]
 pub struct TextWithRankSupport<I, B = Block512> {
     text_len: usize,
@@ -227,54 +227,40 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
 #[derive(Debug, Clone, Copy)]
 #[repr(align(64))]
 pub struct Block512 {
-    data: BitArray<[u64; 8]>,
+    data: [u64; 8],
 }
 
 impl sealed::Sealed for Block512 {}
-
-impl Deref for Block512 {
-    type Target = BitSlice<u64>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-impl DerefMut for Block512 {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.data
-    }
-}
 
 impl Block for Block512 {
     const NUM_BITS: usize = 512;
 
     fn from_init_store(init_store: u64) -> Self {
         Self {
-            data: BitArray::new([init_store; 8]),
+            data: [init_store; 8],
         }
     }
 
     fn as_bitslice(&self) -> &BitSlice<u64> {
-        self.data.as_bitslice()
+        self.data.view_bits()
     }
 
     fn as_mut_bitslice(&mut self) -> &mut BitSlice<u64> {
-        self.data.as_mut_bitslice()
+        self.data.view_bits_mut()
     }
 
     fn as_raw_slice(&self) -> &[u64] {
-        self.data.as_raw_slice()
+        &self.data
     }
 
     fn as_raw_mut_slice(&mut self) -> &mut [u64] {
-        self.data.as_raw_mut_slice()
+        &mut self.data
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Block64 {
-    data: BitArray<u64>,
+    data: u64,
 }
 
 impl sealed::Sealed for Block64 {}
@@ -283,39 +269,23 @@ impl Block for Block64 {
     const NUM_BITS: usize = 64;
 
     fn from_init_store(init_store: u64) -> Self {
-        Self {
-            data: BitArray::new(init_store),
-        }
+        Self { data: init_store }
     }
 
     fn as_bitslice(&self) -> &BitSlice<u64> {
-        self.data.as_bitslice()
+        self.data.view_bits()
     }
 
     fn as_mut_bitslice(&mut self) -> &mut BitSlice<u64> {
-        self.data.as_mut_bitslice()
+        self.data.view_bits_mut()
     }
 
     fn as_raw_slice(&self) -> &[u64] {
-        self.data.as_raw_slice()
+        slice::from_ref(&self.data)
     }
 
     fn as_raw_mut_slice(&mut self) -> &mut [u64] {
-        self.data.as_raw_mut_slice()
-    }
-}
-
-impl Deref for Block64 {
-    type Target = BitSlice<u64>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-impl DerefMut for Block64 {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.data
+        slice::from_mut(&mut self.data)
     }
 }
 
