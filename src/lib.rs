@@ -11,8 +11,11 @@ use libsais::{OutputElement, ThreadCount};
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 
+#[doc(inline)]
 pub use alphabet::Alphabet;
+#[doc(inline)]
 pub use text_with_rank_support::TextWithRankSupport;
+
 use text_with_rank_support::{Block, Block512};
 
 use sampled_suffix_array::SampledSuffixArray;
