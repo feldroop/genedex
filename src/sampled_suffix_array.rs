@@ -8,7 +8,7 @@ use crate::{alphabet::Alphabet, text_with_rank_support::Block};
 
 use super::FmIndex;
 
-#[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct SampledSuffixArray<I> {
     suffix_array_bytes: Vec<u8>,
     text_border_lookup: HashMap<usize, I>,

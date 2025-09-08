@@ -8,7 +8,7 @@ use rayon::prelude::*;
 // for the same text position are next to each other.
 // Blocks must be interleaved for efficient queries.
 // (Super)block offsets are only interleaved for faster (parallel) construction.
-#[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
 pub struct TextWithRankSupport<I, B = Block512> {
     text_len: usize,

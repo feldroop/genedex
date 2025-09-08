@@ -21,7 +21,7 @@ use text_with_rank_support::{Block, Block512};
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
 
-#[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FmIndex<A, I, B = Block512> {
     count: Vec<usize>,
     text_with_rank_support: TextWithRankSupport<I, B>,
