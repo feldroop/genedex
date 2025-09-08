@@ -155,13 +155,14 @@ mod tests {
 
     #[test]
     fn basic_text_lookup() {
-        let sentinel_indices = vec![10, 21, 32, 50, 68, 140];
+        let sentinel_indices = vec![10, 21, 32, 50, 68, 140, 141];
         let text_ids = TexdIdSearchTree::new_from_sentinel_indices(sentinel_indices);
 
         assert_eq!(0, text_ids.lookup_text_id(5));
         assert_eq!(1, text_ids.lookup_text_id(21));
         assert_eq!(0, text_ids.lookup_text_id(0));
         assert_eq!(5, text_ids.lookup_text_id(140));
+        assert_eq!(6, text_ids.lookup_text_id(141));
         assert_eq!(3, text_ids.lookup_text_id(33));
         assert_eq!(4, text_ids.lookup_text_id(67));
     }

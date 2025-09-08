@@ -4,7 +4,7 @@ pub mod text_with_rank_support;
 mod sampled_suffix_array;
 mod text_id_search_tree;
 
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData, sync::Mutex};
 
 use bytemuck::Pod;
 use libsais::{OutputElement, ThreadCount};
@@ -45,11 +45,19 @@ impl<A: Alphabet, I: OutputElement, B: Block> FmIndex<A, I, B> {
         suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
     ) -> Self {
-        let (count, suffix_array_bytes, bwt, text_ids) =
-            create_data_structures::<A, I, T>(texts, suffix_array_construction_thread_count);
+        let DataStructures {
+            count,
+            suffix_array_bytes,
+            bwt,
+            text_ids,
+            text_border_lookup,
+        } = create_data_structures::<A, I, T>(texts, suffix_array_construction_thread_count);
 
-        let sampled_suffix_array =
-            SampledSuffixArray::new_uncompressed(suffix_array_bytes, suffix_array_sampling_rate);
+        let sampled_suffix_array = SampledSuffixArray::new_uncompressed(
+            suffix_array_bytes,
+            suffix_array_sampling_rate,
+            text_border_lookup,
+        );
 
         let occurrence_table = TextWithRankSupport::construct(&bwt, A::SIZE);
 
@@ -71,11 +79,26 @@ impl<A: Alphabet, B: Block> FmIndex<A, u32, B> {
         suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
     ) -> Self {
-        let (count, suffix_array_bytes, bwt, text_ids) =
-            create_data_structures::<A, i64, T>(texts, suffix_array_construction_thread_count);
+        let DataStructures {
+            count,
+            suffix_array_bytes,
+            bwt,
+            text_ids,
+            text_border_lookup,
+        } = create_data_structures::<A, i64, T>(texts, suffix_array_construction_thread_count);
 
-        let sampled_suffix_array =
-            SampledSuffixArray::new_u32_compressed(suffix_array_bytes, suffix_array_sampling_rate);
+        assert!(bwt.len() <= u32::MAX as usize);
+
+        let text_border_lookup = text_border_lookup
+            .into_iter()
+            .map(|(k, v)| (k, v as u32))
+            .collect();
+
+        let sampled_suffix_array = SampledSuffixArray::new_u32_compressed(
+            suffix_array_bytes,
+            suffix_array_sampling_rate,
+            text_border_lookup,
+        );
 
         let occurrence_table = TextWithRankSupport::construct(&bwt, A::SIZE);
 
@@ -99,8 +122,9 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
         let (start, end) = self.search_suffix_array_interval(query);
 
         self.suffix_array
-            .recover_range_uncompressed(start..end, self)
+            .recover_range(start..end, self)
             .map(|idx| {
+                // println!("concat text index: {idx}");
                 let (text_id, position) = self
                     .text_ids
                     .backtransfrom_concatenated_text_index(<usize as NumCast>::from(idx).unwrap());
@@ -111,11 +135,13 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
 
     // returns half open interval [start, end)
     fn search_suffix_array_interval(&self, query: &[u8]) -> (usize, usize) {
+        assert!(!query.is_empty());
+
         let (mut start, mut end) = (0, self.text_with_rank_support.text_len());
 
         for &character in query.iter().rev() {
             let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[character as usize];
-            assert!(symbol != 255);
+            assert!(symbol != 255 && symbol != 0);
 
             // it is assumed that the query doesn't contain the sentinel
             start = self.lf_mapping_step(symbol, start);
@@ -130,10 +156,18 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
     }
 }
 
+struct DataStructures<I> {
+    count: Vec<usize>,
+    suffix_array_bytes: Vec<u8>,
+    bwt: Vec<u8>,
+    text_ids: TexdIdSearchTree,
+    text_border_lookup: HashMap<usize, I>,
+}
+
 fn create_data_structures<A: Alphabet, I: OutputElement, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
     suffix_array_construction_thread_count: u16,
-) -> (Vec<usize>, Vec<u8>, Vec<u8>, TexdIdSearchTree) {
+) -> DataStructures<I> {
     let (text, mut frequency_table, sentinel_indices) =
         create_concatenated_densely_encoded_text(texts, &A::DENSE_ENCODING_TRANSLATION_TABLE);
 
@@ -157,9 +191,15 @@ fn create_data_structures<A: Alphabet, I: OutputElement, T: AsRef<[u8]>>(
         .run()
         .expect("libsais suffix array construction");
 
-    let bwt = bwt_from_suffix_array(suffix_array_buffer, &text);
+    let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
 
-    (count, suffix_array_bytes, bwt, text_ids)
+    DataStructures {
+        count,
+        suffix_array_bytes,
+        bwt,
+        text_ids,
+        text_border_lookup,
+    }
 }
 
 fn create_concatenated_densely_encoded_text<S: OutputElement, T: AsRef<[u8]>>(
@@ -241,25 +281,40 @@ fn frequency_table_to_count<S: OutputElement>(
     count
 }
 
-fn bwt_from_suffix_array<I: OutputElement>(suffix_array: &[I], text: &[u8]) -> Vec<u8> {
+fn bwt_from_suffix_array<I: OutputElement>(
+    suffix_array: &[I],
+    text: &[u8],
+) -> (Vec<u8>, HashMap<usize, I>) {
     let mut bwt = vec![0; text.len()];
+
+    let text_border_lookup = Mutex::new(HashMap::new());
 
     suffix_array
         .par_iter()
         .zip(&mut bwt)
+        .enumerate()
         // type named to fix rust-analyzer problem
-        .for_each(|(&text_index, bwt_entry): (&I, &mut u8)| {
-            let text_index = <usize as NumCast>::from(text_index).unwrap();
+        .for_each(
+            |(suffix_array_index, (&text_index, bwt_entry)): (usize, (&I, &mut u8))| {
+                let text_index_usize = <usize as NumCast>::from(text_index).unwrap();
 
-            *bwt_entry = if text_index > 0 {
-                text[text_index - 1]
-            } else {
-                // last text character is always 0
-                0
-            };
-        });
+                *bwt_entry = if text_index_usize > 0 {
+                    text[text_index_usize - 1]
+                } else {
+                    // last text character is always 0
+                    0
+                };
 
-    bwt
+                if *bwt_entry == 0 {
+                    text_border_lookup
+                        .lock()
+                        .unwrap()
+                        .insert(suffix_array_index, text_index);
+                }
+            },
+        );
+
+    (bwt, text_border_lookup.into_inner().unwrap())
 }
 
 #[cfg(test)]

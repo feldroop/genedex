@@ -1,4 +1,4 @@
-// sentinel 0 is currently always included
+// sentinel 0 is NOT allowed to be a defined value for the alphabet
 pub trait Alphabet {
     const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256];
     const SIZE: usize;

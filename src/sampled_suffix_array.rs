@@ -2,7 +2,7 @@ use bytemuck::Pod;
 use libsais::OutputElement;
 use num_traits::{NumCast, PrimInt};
 
-use std::{marker::PhantomData, ops::Range};
+use std::{collections::HashMap, marker::PhantomData, ops::Range};
 
 use crate::{alphabet::Alphabet, text_with_rank_support::Block};
 
@@ -11,12 +11,17 @@ use super::FmIndex;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct SampledSuffixArray<I> {
     suffix_array_bytes: Vec<u8>,
+    text_border_lookup: HashMap<usize, I>,
     sampling_rate: usize,
     _compression_marker: PhantomData<I>,
 }
 
 impl<I: OutputElement> SampledSuffixArray<I> {
-    pub(crate) fn new_uncompressed(mut suffix_array_bytes: Vec<u8>, sampling_rate: usize) -> Self {
+    pub(crate) fn new_uncompressed(
+        mut suffix_array_bytes: Vec<u8>,
+        sampling_rate: usize,
+        text_border_lookup: HashMap<usize, I>,
+    ) -> Self {
         let suffix_array_view: &mut [I] = bytemuck::cast_slice_mut(&mut suffix_array_bytes);
 
         let mut num_retained_values = 0;
@@ -35,6 +40,7 @@ impl<I: OutputElement> SampledSuffixArray<I> {
 
         Self {
             suffix_array_bytes,
+            text_border_lookup,
             sampling_rate,
             _compression_marker: PhantomData,
         }
@@ -45,6 +51,7 @@ impl SampledSuffixArray<u32> {
     pub(crate) fn new_u32_compressed(
         mut suffix_array_bytes: Vec<u8>,
         sampling_rate: usize,
+        text_border_lookup: HashMap<usize, u32>,
     ) -> Self {
         let suffix_array_view: &mut [i64] = bytemuck::cast_slice_mut(&mut suffix_array_bytes);
 
@@ -83,6 +90,7 @@ impl SampledSuffixArray<u32> {
 
         Self {
             suffix_array_bytes,
+            text_border_lookup,
             sampling_rate,
             _compression_marker: PhantomData,
         }
@@ -90,7 +98,7 @@ impl SampledSuffixArray<u32> {
 }
 
 impl<I: PrimInt + Pod> SampledSuffixArray<I> {
-    pub(crate) fn recover_range_uncompressed<A: Alphabet, B: Block>(
+    pub(crate) fn recover_range<A: Alphabet, B: Block>(
         &self,
         range: Range<usize>,
         index: &FmIndex<A, I, B>,
@@ -99,15 +107,72 @@ impl<I: PrimInt + Pod> SampledSuffixArray<I> {
             let mut num_steps_done = I::zero();
 
             while i % self.sampling_rate != 0 {
-                let bwt_rank = index.text_with_rank_support.symbol_at(i);
-                i = index.lf_mapping_step(bwt_rank, i);
+                let bwt_symbol = index.text_with_rank_support.symbol_at(i);
+
+                if bwt_symbol == 0 {
+                    return <usize as NumCast>::from(self.text_border_lookup[&i] + num_steps_done)
+                        .unwrap();
+                }
+
+                i = index.lf_mapping_step(bwt_symbol, i);
+
                 num_steps_done = num_steps_done + I::one();
             }
 
             let suffix_array_view: &[I] = bytemuck::cast_slice(&self.suffix_array_bytes);
+
             <usize as NumCast>::from(suffix_array_view[i / self.sampling_rate] + num_steps_done)
                 .unwrap()
-                % index.text_with_rank_support.text_len()
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{FmIndexI32, alphabet::AsciiDnaWithN};
+    use proptest::prelude::*;
+
+    fn copied_and_recovered_array_must_equal<T: AsRef<[u8]>>(texts: &[T], sampling_rate: usize) {
+        let n: usize = texts.iter().map(|t| t.as_ref().len()).sum();
+
+        let sampled_index = FmIndexI32::<AsciiDnaWithN>::new(texts, 1, sampling_rate);
+        let index = FmIndexI32::<AsciiDnaWithN>::new(texts, 1, 1);
+
+        let recovered_array: Vec<_> = sampled_index
+            .suffix_array
+            .recover_range(0..n, &sampled_index)
+            .collect();
+        let copied_array: Vec<_> = index.suffix_array.recover_range(0..n, &index).collect();
+
+        assert_eq!(copied_array, recovered_array);
+    }
+
+    #[test]
+    fn walking_over_text_borders() {
+        let texts = [
+            [65].as_slice(),
+            [].as_slice(),
+            [78, 84, 78, 78, 84, 78, 78, 84, 78].as_slice(),
+        ];
+
+        let sampling_rate = 5;
+
+        copied_and_recovered_array_must_equal(&texts, sampling_rate);
+    }
+
+    proptest! {
+        // default is 256 and I'd like some more test cases that need to pass
+        #![proptest_config(ProptestConfig::with_cases(2048))]
+
+        #[test]
+        fn correctness_random_texts(
+            texts in prop::collection::vec(
+            prop::collection::vec((0usize..5).prop_map(|i| b"ACGTN"[i]), 0..1500),
+            1..5
+        ),
+            sampling_rate in 1usize..=8
+        ) {
+            copied_and_recovered_array_must_equal(&texts, sampling_rate);
+        }
     }
 }
