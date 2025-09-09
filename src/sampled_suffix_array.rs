@@ -8,8 +8,8 @@ use crate::{alphabet::Alphabet, text_with_rank_support::Block};
 
 use super::FmIndex;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub(crate) struct SampledSuffixArray<I> {
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
+pub(crate) struct SampledSuffixArray<I: 'static> {
     suffix_array_bytes: Vec<u8>,
     text_border_lookup: HashMap<usize, I>,
     sampling_rate: usize,

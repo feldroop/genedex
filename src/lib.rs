@@ -4,7 +4,7 @@ pub mod text_with_rank_support;
 mod sampled_suffix_array;
 mod text_id_search_tree;
 
-use std::{collections::HashMap, marker::PhantomData, sync::Mutex};
+use std::{collections::HashMap, marker::PhantomData};
 
 use bytemuck::Pod;
 use libsais::{OutputElement, ThreadCount};
@@ -21,8 +21,11 @@ use text_with_rank_support::{Block, Block512};
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct FmIndex<A, I, B = Block512> {
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
+pub struct FmIndex<A, I: 'static, B = Block512>
+where
+    B: 'static,
+{
     count: Vec<usize>,
     text_with_rank_support: TextWithRankSupport<I, B>,
     suffix_array: SampledSuffixArray<I>,
@@ -290,34 +293,59 @@ fn bwt_from_suffix_array<I: OutputElement>(
 ) -> (Vec<u8>, HashMap<usize, I>) {
     let mut bwt = vec![0; text.len()];
 
-    let text_border_lookup = Mutex::new(HashMap::new());
+    // collecting the text border lookup values while constructing the BWT made the function
+    // run much slower. this two-level chunk scheme leads to the same performance as before
+    let outer_chunk_size = text.len().div_ceil(rayon::current_num_threads() * 4);
+    let inner_chunk_size = 128;
 
-    suffix_array
-        .par_iter()
-        .zip(&mut bwt)
+    let text_border_lookup = suffix_array
+        .par_chunks(outer_chunk_size)
+        .zip(bwt.par_chunks_mut(outer_chunk_size))
         .enumerate()
-        // type named to fix rust-analyzer problem
-        .for_each(
-            |(suffix_array_index, (&text_index, bwt_entry)): (usize, (&I, &mut u8))| {
-                let text_index_usize = <usize as NumCast>::from(text_index).unwrap();
+        .map(
+            |(outer_chunk_index, (outer_suffix_array_chunk, outer_bwt_chunk))| {
+                let mut text_border_lookup = HashMap::new();
 
-                *bwt_entry = if text_index_usize > 0 {
-                    text[text_index_usize - 1]
-                } else {
-                    // last text character is always 0
-                    0
-                };
+                for (inner_chunk_index, (inner_suffix_array_chunk, inner_bwt_chunk)) in
+                    outer_suffix_array_chunk
+                        .chunks(inner_chunk_size)
+                        .zip(outer_bwt_chunk.chunks_mut(inner_chunk_size))
+                        .enumerate()
+                {
+                    for (&text_index, bwt_entry) in inner_suffix_array_chunk
+                        .iter()
+                        .zip(inner_bwt_chunk.iter_mut())
+                    {
+                        let text_index_usize = <usize as NumCast>::from(text_index).unwrap();
 
-                if *bwt_entry == 0 {
-                    text_border_lookup
-                        .lock()
-                        .unwrap()
-                        .insert(suffix_array_index, text_index);
+                        *bwt_entry = if text_index_usize > 0 {
+                            text[text_index_usize - 1]
+                        } else {
+                            // last text character is always 0
+                            0
+                        };
+                    }
+
+                    for i in memchr::memchr_iter(0, inner_bwt_chunk) {
+                        let text_border_index = outer_chunk_size * outer_chunk_index
+                            + inner_chunk_size * inner_chunk_index
+                            + i;
+                        text_border_lookup.insert(text_border_index, inner_suffix_array_chunk[i]);
+                    }
                 }
-            },
-        );
 
-    (bwt, text_border_lookup.into_inner().unwrap())
+                text_border_lookup
+            },
+        )
+        .reduce_with(|mut m0, m1| {
+            for (key, value) in m1.into_iter() {
+                m0.insert(key, value);
+            }
+            m0
+        })
+        .unwrap_or_default();
+
+    (bwt, text_border_lookup)
 }
 
 #[cfg(test)]

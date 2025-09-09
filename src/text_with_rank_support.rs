@@ -8,9 +8,12 @@ use rayon::prelude::*;
 // for the same text position are next to each other.
 // Blocks must be interleaved for efficient queries.
 // (Super)block offsets are only interleaved for faster (parallel) construction.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 #[derive(Debug)]
-pub struct TextWithRankSupport<I, B = Block512> {
+pub struct TextWithRankSupport<I: 'static, B = Block512>
+where
+    B: 'static,
+{
     text_len: usize,
     alphabet_size: usize,
     interleaved_blocks: Vec<B>,
@@ -224,7 +227,7 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 #[derive(Debug, Clone, Copy)]
 #[repr(align(64))]
 pub struct Block512 {
@@ -259,7 +262,7 @@ impl Block for Block512 {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 #[derive(Debug, Clone, Copy)]
 pub struct Block64 {
     data: u64,

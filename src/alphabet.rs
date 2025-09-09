@@ -135,6 +135,7 @@ pub(crate) const ASCII_DNA_IUPAC_AS_DNA_N_TRANSLATION_TABLE: [u8; 256] = {
     table
 };
 
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 pub struct AsciiDna {}
 
 impl Alphabet for AsciiDna {
@@ -142,6 +143,7 @@ impl Alphabet for AsciiDna {
     const SIZE: usize = 5;
 }
 
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 pub struct AsciiDnaWithN {}
 
 impl Alphabet for AsciiDnaWithN {
@@ -149,6 +151,7 @@ impl Alphabet for AsciiDnaWithN {
     const SIZE: usize = 6;
 }
 
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 pub struct AsciiDnaIupac {}
 
 impl Alphabet for AsciiDnaIupac {
@@ -156,6 +159,7 @@ impl Alphabet for AsciiDnaIupac {
     const SIZE: usize = 16;
 }
 
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 pub struct AsciiDnaIupacAsDna {}
 
 impl Alphabet for AsciiDnaIupacAsDna {
@@ -163,6 +167,7 @@ impl Alphabet for AsciiDnaIupacAsDna {
     const SIZE: usize = 5;
 }
 
+#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 pub struct AsciiDnaIupacAsDnaWithN {}
 
 impl Alphabet for AsciiDnaIupacAsDnaWithN {

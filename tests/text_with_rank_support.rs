@@ -47,7 +47,10 @@ fn create_occurrence_column(target_symbol: u8, bwt: &[u8]) -> Vec<usize> {
     column
 }
 
-fn test_against_naive<I: PrimInt + Send + Sync, B: Block>(text: &[u8], alphabet_size: usize) {
+fn test_against_naive<I: PrimInt + Send + Sync + 'static, B: Block + 'static>(
+    text: &[u8],
+    alphabet_size: usize,
+) {
     let text_rank = TextWithRankSupport::<I, B>::construct(text, alphabet_size);
     let naive_text_rank = NaiveTextWithRankSupport::construct(text, alphabet_size);
 

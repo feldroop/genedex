@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 1ce74aa25c540ba9dd20e279e4d58b88514d0b3d882a63bcae9281b6a5626cc6
+cc e01a412e21d167af83fb06f0900a462e946678182f9bb22b13c75c7b60e1101d # shrinks to texts = [[]], sampling_rate = 1

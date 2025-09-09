@@ -8,8 +8,10 @@ libsais = "0.2.0"
 num-traits = "0.2.19"
 rayon = "1.11"
 bytemuck = "1.23.2"
-serde = { version = "1", features = ["derive"], optional = true }
 bitvec = "1"
+savefile-derive = { version = "0.19", optional = true }
+savefile = { version = "0.19", optional = true }
+memchr = "2.7"
 
 [dev-dependencies]
 proptest = "1.6.0"
@@ -18,8 +20,7 @@ rand_chacha = "0.9.0"
 
 [features]
 default = []
-serde = ["dep:serde"]
-
+savefile = ["dep:savefile-derive", "dep:savefile"]
 # optimize code for faster proptesting (needs to be removed when debugging tests)
 [profile.test]
 opt-level = 3
