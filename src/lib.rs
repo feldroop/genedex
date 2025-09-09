@@ -65,11 +65,11 @@ impl<A: Alphabet, I: OutputElement, B: Block> FmIndex<A, I, B> {
             text_border_lookup,
         );
 
-        let occurrence_table = TextWithRankSupport::construct(&bwt, A::SIZE);
+        let text_with_rank_support = TextWithRankSupport::construct(&bwt, A::SIZE);
 
         FmIndex {
             count,
-            text_with_rank_support: occurrence_table,
+            text_with_rank_support,
             suffix_array: sampled_suffix_array,
             text_ids,
             _alphabet_marker: PhantomData,
@@ -106,11 +106,11 @@ impl<A: Alphabet, B: Block> FmIndex<A, u32, B> {
             text_border_lookup,
         );
 
-        let occurrence_table = TextWithRankSupport::construct(&bwt, A::SIZE);
+        let text_with_rank_support = TextWithRankSupport::construct(&bwt, A::SIZE);
 
         FmIndex {
             count,
-            text_with_rank_support: occurrence_table,
+            text_with_rank_support,
             suffix_array: sampled_suffix_array,
             text_ids,
             _alphabet_marker: PhantomData,
