@@ -116,7 +116,7 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
 
         let index_in_block = idx % B::NUM_BITS;
         accumulator_block.as_mut_bitslice()[index_in_block..].fill(false);
-        let block_count = accumulator_block.as_bitslice().count_ones();
+        let block_count = accumulator_block.count_ones();
 
         superblock_offset + block_offset + block_count
     }
@@ -225,6 +225,8 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
             *store &= other_store;
         }
     }
+
+    fn count_ones(&self) -> usize;
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
@@ -260,6 +262,10 @@ impl Block for Block512 {
     fn as_raw_mut_slice(&mut self) -> &mut [u64] {
         &mut self.data
     }
+
+    fn count_ones(&self) -> usize {
+        self.data.iter().map(|&s| s.count_ones() as usize).sum()
+    }
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
@@ -291,6 +297,10 @@ impl Block for Block64 {
 
     fn as_raw_mut_slice(&mut self) -> &mut [u64] {
         slice::from_mut(&mut self.data)
+    }
+
+    fn count_ones(&self) -> usize {
+        self.data.count_ones() as usize
     }
 }
 
