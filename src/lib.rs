@@ -318,12 +318,13 @@ fn bwt_from_suffix_array<I: OutputElement>(
                     {
                         let text_index_usize = <usize as NumCast>::from(text_index).unwrap();
 
-                        *bwt_entry = if text_index_usize > 0 {
-                            text[text_index_usize - 1]
+                        let text_index_usize = if text_index_usize > 0 {
+                            text_index_usize
                         } else {
-                            // last text character is always 0
-                            0
+                            text.len()
                         };
+
+                        *bwt_entry = text[text_index_usize - 1];
                     }
 
                     for i in memchr::memchr_iter(0, inner_bwt_chunk) {
