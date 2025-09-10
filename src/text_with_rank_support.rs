@@ -226,7 +226,12 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
         }
     }
 
-    fn count_ones(&self) -> usize;
+    fn count_ones(&self) -> usize {
+        self.as_raw_slice()
+            .iter()
+            .map(|&s| s.count_ones() as usize)
+            .sum()
+    }
 
     fn get_bit(&self, index: usize) -> u8;
 }
@@ -265,10 +270,6 @@ impl Block for Block512 {
         &mut self.data
     }
 
-    fn count_ones(&self) -> usize {
-        self.data.iter().map(|&s| s.count_ones() as usize).sum()
-    }
-
     fn get_bit(&self, index: usize) -> u8 {
         let store_index = index / 64;
         let index_in_store = index % 64;
@@ -305,10 +306,6 @@ impl Block for Block64 {
 
     fn as_raw_mut_slice(&mut self) -> &mut [u64] {
         slice::from_mut(&mut self.data)
-    }
-
-    fn count_ones(&self) -> usize {
-        self.data.count_ones() as usize
     }
 
     fn get_bit(&self, index: usize) -> u8 {
