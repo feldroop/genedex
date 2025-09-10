@@ -122,8 +122,6 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
     }
 
     pub fn symbol_at(&self, idx: usize) -> u8 {
-        let mut symbol = 0;
-
         let alphabet_num_bits = ilog2_ceil(self.alphabet_size);
         let blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
         let blocks_end = blocks_start + alphabet_num_bits;
@@ -131,10 +129,12 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
         let blocks = &self.interleaved_blocks[blocks_start..blocks_end];
 
         let index_in_block = idx % B::NUM_BITS;
-        let symbol_bits = symbol.view_bits_mut::<Lsb0>();
 
-        for (block, mut bit) in blocks.iter().zip(symbol_bits) {
-            bit.set(block.as_bitslice()[index_in_block]);
+        let mut symbol = 0;
+
+        for (i, block) in blocks.iter().enumerate() {
+            let block_bit = block.get_bit(index_in_block);
+            symbol |= block_bit << i;
         }
 
         symbol
@@ -159,7 +159,7 @@ fn fill_superblock<I: PrimInt, B: Block>(
     let block_offsets_iter = interleaved_block_offsets.chunks_mut(alphabet_size);
     let blocks_iter = interleaved_blocks.chunks_mut(alphabet_num_bits);
 
-    let text_overshoot = text_block_iter.len() < blocks_iter.len();
+    let blocks_overshoot = text_block_iter.len() < blocks_iter.len();
 
     let block_package_iter = text_block_iter.zip(block_offsets_iter).zip(blocks_iter);
 
@@ -183,7 +183,7 @@ fn fill_superblock<I: PrimInt, B: Block>(
     }
 
     // annoying edge case, because the bit array we're storing is text.len() + 1 large
-    if text_overshoot {
+    if blocks_overshoot {
         interleaved_block_offsets
             .rchunks_mut(alphabet_size)
             .next()
@@ -227,6 +227,8 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
     }
 
     fn count_ones(&self) -> usize;
+
+    fn get_bit(&self, index: usize) -> u8;
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
@@ -266,6 +268,12 @@ impl Block for Block512 {
     fn count_ones(&self) -> usize {
         self.data.iter().map(|&s| s.count_ones() as usize).sum()
     }
+
+    fn get_bit(&self, index: usize) -> u8 {
+        let store_index = index / 64;
+        let index_in_store = index % 64;
+        ((self.data[store_index] >> index_in_store) & 1) as u8
+    }
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
@@ -301,6 +309,10 @@ impl Block for Block64 {
 
     fn count_ones(&self) -> usize {
         self.data.count_ones() as usize
+    }
+
+    fn get_bit(&self, index: usize) -> u8 {
+        ((self.data >> index) & 1) as u8
     }
 }
 
