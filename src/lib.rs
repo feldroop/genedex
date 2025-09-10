@@ -152,6 +152,10 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
             // it is assumed that the query doesn't contain the sentinel
             start = self.lf_mapping_step(symbol, start);
             end = self.lf_mapping_step(symbol, end);
+
+            if start == end {
+                break;
+            }
         }
 
         (start, end)
