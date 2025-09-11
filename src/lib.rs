@@ -150,15 +150,18 @@ impl<A: Alphabet, B: Block> FmIndex<A, u32, B> {
 
 impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
     pub fn count(&self, query: &[u8]) -> usize {
-        let (start, end) = self.backwards_search_with_alphabet_translation(query);
-        end - start
+        self.cursor().extend_back_to_front(query).count()
     }
 
     pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = Hit> {
-        let (start, end) = self.backwards_search_with_alphabet_translation(query);
+        let cursor = self.cursor().extend_back_to_front(query);
 
+        self.locate_interval(cursor.interval)
+    }
+
+    fn locate_interval(&self, interval: Interval) -> impl Iterator<Item = Hit> {
         self.suffix_array
-            .recover_range(start..end, self)
+            .recover_range(interval.start..interval.end, self)
             .map(|idx| {
                 let (text_id, position) = self
                     .text_ids
@@ -168,37 +171,130 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
             })
     }
 
-    // returns half open interval [start, end)
-    fn backwards_search_with_alphabet_translation(&self, query: &[u8]) -> (usize, usize) {
-        let iter = query.iter().rev().map(|&s| {
-            let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[s as usize];
-            assert!(symbol != 255 && symbol != 0);
-            symbol
-        });
-
-        self.search_in_order_dense_encoded(iter)
-    }
-
-    fn search_in_order_dense_encoded(
-        &self,
-        query: impl IntoIterator<Item = u8> + ExactSizeIterator + Clone,
-    ) -> (usize, usize) {
-        let lookup_depth = std::cmp::min(query.len(), self.lookup_tables.max_depth());
-        let (mut start, mut end) = self.lookup_tables.lookup(query.clone(), lookup_depth);
-
-        for symbol in query.into_iter().skip(lookup_depth) {
-            start = self.lf_mapping_step(symbol, start);
-            end = self.lf_mapping_step(symbol, end);
-
-            if start == end {
-                break;
-            }
+    pub fn cursor<'a>(&'a self) -> Cursor<'a, Init, A, I, B> {
+        Cursor {
+            index: self,
+            interval: Interval {
+                start: 0,
+                end: self.text_with_rank_support.text_len(),
+            },
+            _marker: PhantomData,
         }
-
-        (start, end)
     }
 
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
         self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
     }
+}
+
+#[derive(Clone)]
+pub struct Cursor<'a, C, A, I: 'static, B: 'static> {
+    index: &'a FmIndex<A, I, B>,
+    interval: Interval,
+    _marker: PhantomData<C>,
+}
+
+impl<'a, C: CursorState, A: Alphabet, I: PrimInt + Pod + 'static, B: Block> Cursor<'a, C, A, I, B> {
+    pub fn extend_front(self, symbol: u8) -> Cursor<'a, StepsDone, A, I, B> {
+        let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[symbol as usize];
+        debug_assert!(symbol != 255 && symbol != 0);
+
+        self.extend_front_without_alphabet_translation(symbol)
+    }
+
+    fn extend_front_without_alphabet_translation(
+        self,
+        symbol: u8,
+    ) -> Cursor<'a, StepsDone, A, I, B> {
+        let (start, end) = if self.interval.start != self.interval.end {
+            (
+                self.index.lf_mapping_step(symbol, self.interval.start),
+                self.index.lf_mapping_step(symbol, self.interval.end),
+            )
+        } else {
+            (self.interval.start, self.interval.end)
+        };
+
+        Cursor {
+            index: self.index,
+            interval: Interval { start, end },
+            _marker: PhantomData,
+        }
+    }
+
+    // returns half open interval [start, end)
+    pub fn interval(&self) -> Interval {
+        self.interval
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.interval.start == self.interval.end
+    }
+
+    pub fn count(&self) -> usize {
+        self.interval.end - self.interval.start
+    }
+
+    pub fn locate(&self) -> impl Iterator<Item = Hit> {
+        self.index.locate_interval(self.interval)
+    }
+}
+
+impl<'a, A: Alphabet, I: PrimInt + Pod + 'static, B: Block> Cursor<'a, Init, A, I, B> {
+    pub fn extend_back_to_front(self, query: &[u8]) -> Cursor<'a, StepsDone, A, I, B> {
+        let query_iter = query.iter().rev().map(|&s| {
+            let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[s as usize];
+            debug_assert!(symbol != 255 && symbol != 0);
+            symbol
+        });
+
+        self.extend_iter_without_alphabet_translation(query_iter)
+    }
+
+    fn extend_iter_without_alphabet_translation(
+        self,
+        query: impl IntoIterator<Item = u8> + ExactSizeIterator + Clone,
+    ) -> Cursor<'a, StepsDone, A, I, B> {
+        let lookup_depth = std::cmp::min(query.len(), self.index.lookup_tables.max_depth());
+        let (start, end) = self
+            .index
+            .lookup_tables
+            .lookup(query.clone().into_iter(), lookup_depth);
+
+        let mut cursor = Cursor {
+            index: self.index,
+            interval: Interval { start, end },
+            _marker: PhantomData,
+        };
+
+        for symbol in query.into_iter().skip(lookup_depth) {
+            cursor = cursor.extend_front_without_alphabet_translation(symbol);
+
+            if cursor.is_empty() {
+                break;
+            }
+        }
+
+        cursor
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Interval {
+    start: usize,
+    end: usize,
+}
+
+use typestate::*;
+
+mod typestate {
+    pub trait CursorState {}
+
+    pub struct Init {}
+
+    impl CursorState for Init {}
+
+    pub struct StepsDone {}
+
+    impl CursorState for StepsDone {}
 }

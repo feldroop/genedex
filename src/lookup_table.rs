@@ -110,10 +110,13 @@ fn fill_table<A: Alphabet, I: PrimInt + Pod + 'static, B: Block>(
     if curr_depth == max_depth {
         for symbol in 0..num_symbols {
             query[curr_depth - 1] = symbol as u8 + 1; // +1 to offset sentinel
-            let (start, end) = index.search_in_order_dense_encoded(query.iter().copied());
+            let interval = index
+                .cursor()
+                .extend_iter_without_alphabet_translation(query.iter().copied())
+                .interval();
             data[curr_data_idx + symbol] = (
-                <I as NumCast>::from(start).unwrap(),
-                <I as NumCast>::from(end).unwrap(),
+                <I as NumCast>::from(interval.start).unwrap(),
+                <I as NumCast>::from(interval.end).unwrap(),
             );
         }
 
