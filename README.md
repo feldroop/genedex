@@ -4,10 +4,12 @@ Coming soon!
 
 ## Possible future extensions:
 
-- API:
+- API/structure:
+    - better API for construction
     - better API for alphabets, the current one is not fleshed out
     - more alphabets + better test coverage for different alphabets
     - flexible cursor API
+    - gate rayon/OpenMP usage behind feature flag (enabled by default)
 - Optimization ideas for existing features:
     - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome),
     - improved build memory usage (maybe a configurable, slower low memory mode): 
