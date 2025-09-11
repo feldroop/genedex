@@ -135,8 +135,8 @@ mod tests {
     fn copied_and_recovered_array_must_equal<T: AsRef<[u8]>>(texts: &[T], sampling_rate: usize) {
         let n: usize = texts.iter().map(|t| t.as_ref().len()).sum();
 
-        let sampled_index = FmIndexI32::<AsciiDnaWithN>::new(texts, 1, sampling_rate);
-        let index = FmIndexI32::<AsciiDnaWithN>::new(texts, 1, 1);
+        let sampled_index = FmIndexI32::<AsciiDnaWithN>::new(texts, 1, sampling_rate, 4);
+        let index = FmIndexI32::<AsciiDnaWithN>::new(texts, 1, 1, 4);
 
         let recovered_array: Vec<_> = sampled_index
             .suffix_array

@@ -1,7 +1,9 @@
+// There might be values at the end of the alphabet that are never searched (like N)
 // sentinel 0 is NOT allowed to be a defined value for the alphabet
 pub trait Alphabet {
     const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256];
     const SIZE: usize;
+    const NUM_SYMBOL_NOT_SEARCHED: usize;
 }
 
 pub(crate) const ASCII_DNA_TRANSLATION_TABLE: [u8; 256] = {
@@ -141,6 +143,7 @@ pub struct AsciiDna {}
 impl Alphabet for AsciiDna {
     const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_TRANSLATION_TABLE;
     const SIZE: usize = 5;
+    const NUM_SYMBOL_NOT_SEARCHED: usize = 0;
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
@@ -149,6 +152,7 @@ pub struct AsciiDnaWithN {}
 impl Alphabet for AsciiDnaWithN {
     const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_N_TRANSLATION_TABLE;
     const SIZE: usize = 6;
+    const NUM_SYMBOL_NOT_SEARCHED: usize = 1;
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
@@ -157,6 +161,7 @@ pub struct AsciiDnaIupac {}
 impl Alphabet for AsciiDnaIupac {
     const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_TRANSLATION_TABLE;
     const SIZE: usize = 16;
+    const NUM_SYMBOL_NOT_SEARCHED: usize = 0;
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
@@ -165,6 +170,7 @@ pub struct AsciiDnaIupacAsDna {}
 impl Alphabet for AsciiDnaIupacAsDna {
     const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_AS_DNA_TRANSLATION_TABLE;
     const SIZE: usize = 5;
+    const NUM_SYMBOL_NOT_SEARCHED: usize = 0;
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
@@ -173,4 +179,5 @@ pub struct AsciiDnaIupacAsDnaWithN {}
 impl Alphabet for AsciiDnaIupacAsDnaWithN {
     const DENSE_ENCODING_TRANSLATION_TABLE: [u8; 256] = ASCII_DNA_IUPAC_AS_DNA_N_TRANSLATION_TABLE;
     const SIZE: usize = 6;
+    const NUM_SYMBOL_NOT_SEARCHED: usize = 1;
 }

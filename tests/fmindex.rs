@@ -1,6 +1,6 @@
 use genedex::{
     FmIndexI32, FmIndexI64, FmIndexU32, Hit,
-    alphabet::{AsciiDna, AsciiDnaWithN},
+    alphabet::{AsciiDna, AsciiDnaIupacAsDna, AsciiDnaWithN},
 };
 use proptest::prelude::*;
 use rand::SeedableRng;
@@ -10,13 +10,13 @@ use std::collections::HashSet;
 fn create_index() -> FmIndexI32<AsciiDna> {
     let text = b"cccaaagggttt".as_slice();
 
-    FmIndexI32::new([text], 1, 3)
+    FmIndexI32::new([text], 1, 3, 0)
 }
 
 fn create_index_u32_compressed() -> FmIndexU32<AsciiDna> {
     let text = b"cccaaagggttt".as_slice();
 
-    FmIndexU32::new_u32_compressed([text], 1, 3)
+    FmIndexU32::new_u32_compressed([text], 1, 3, 1)
 }
 
 static BASIC_QUERY: &[u8] = b"gg";
@@ -90,7 +90,7 @@ fn search_no_wrapping() {
 fn search_multitext() {
     let texts = [b"cccaaagggttt".as_slice(), b"acgtacgtacgt"];
 
-    let index = FmIndexU32::<AsciiDna>::new_u32_compressed(texts, 1, 3);
+    let index = FmIndexU32::<AsciiDna>::new_u32_compressed(texts, 1, 3, 4);
 
     let expected_results_basic_query = HashSet::from_iter([
         Hit {
@@ -142,6 +142,7 @@ impl<'t, 'r> Iterator for QuerySampler<'t, 'r> {
         if self.texts.is_empty() {
             return None;
         }
+
         let text_id = self.rng.random_range(0..self.texts.len());
         let text = &self.texts[text_id];
 
@@ -150,7 +151,7 @@ impl<'t, 'r> Iterator for QuerySampler<'t, 'r> {
         }
 
         let position = self.rng.random_range(0..text.len());
-        let extent_range = 1..std::cmp::min(self.max_extent, text.len() - position + 1);
+        let extent_range = 0..std::cmp::min(self.max_extent, text.len() - position + 1);
         let extent = self.rng.random_range(extent_range);
 
         Some((
@@ -169,10 +170,10 @@ impl<'r> Iterator for RandomQueryGenerator<'r> {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let len = self.rng.random_range(1..self.max_len);
+        let len = self.rng.random_range(0..self.max_len);
         let mut query = vec![0; len];
         for q in query.iter_mut() {
-            *q = b"ACGTN"[self.rng.random_range(0..5)];
+            *q = b"ACGT"[self.rng.random_range(0..4)];
         }
 
         Some(query)
@@ -183,6 +184,14 @@ fn naive_search(texts: &[Vec<u8>], query: &[u8]) -> HashSet<Hit> {
     let mut hits = HashSet::new();
 
     for (text_id, text) in texts.iter().enumerate() {
+        if query.len() == 0 {
+            for position in 0..=text.len() {
+                hits.insert(Hit { text_id, position });
+            }
+
+            continue;
+        }
+
         for (position, window) in text.windows(query.len()).enumerate() {
             if window == query {
                 hits.insert(Hit { text_id, position });
@@ -199,11 +208,12 @@ proptest! {
     #[test]
     fn correctness_random_texts(
         texts in prop::collection::vec(
-            prop::collection::vec((0usize..5).prop_map(|i| b"ACGTN"[i]), 0..1500),
+            prop::collection::vec((0usize..4).prop_map(|i| b"ACGT"[i]), 0..1500),
             1..5
         ),
         suffix_array_sampling_rate in 1usize..=64,
         num_threads in 1u16..4,
+        lookup_table_depth in 0usize..6,
         seed in any::<u64>()
     ) {
         let pool = rayon::ThreadPoolBuilder::new()
@@ -219,9 +229,9 @@ proptest! {
         let random_queries_naive_hits: Vec<_> = random_queries.iter().map(|q| naive_search(&texts, q)).collect();
 
         pool.install(|| {
-            let index_i32 = FmIndexI32::<AsciiDnaWithN>::new(&texts, num_threads, suffix_array_sampling_rate);
-            let index_u32 = FmIndexU32::<AsciiDnaWithN>::new_u32_compressed(&texts, num_threads, suffix_array_sampling_rate);
-            let index_i64 = FmIndexI64::<AsciiDnaWithN>::new(&texts, num_threads, suffix_array_sampling_rate);
+            let index_i32 = FmIndexI32::<AsciiDna>::new(&texts, num_threads, suffix_array_sampling_rate, lookup_table_depth);
+            let index_u32 = FmIndexU32::<AsciiDnaWithN>::new_u32_compressed(&texts, num_threads, suffix_array_sampling_rate, lookup_table_depth);
+            let index_i64 = FmIndexI64::<AsciiDnaIupacAsDna>::new(&texts, num_threads, suffix_array_sampling_rate, lookup_table_depth);
 
             for (hit, query) in existing_queries {
                 let results_i32: HashSet<_> = index_i32.locate(query).collect();

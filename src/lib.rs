@@ -2,6 +2,7 @@ pub mod alphabet;
 pub mod text_with_rank_support;
 
 mod construction;
+mod lookup_table;
 mod sampled_suffix_array;
 mod text_id_search_tree;
 
@@ -21,6 +22,8 @@ use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
 use text_with_rank_support::{Block, Block512};
 
+use crate::lookup_table::LookupTables;
+
 #[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
 pub struct FmIndex<A, I: 'static, B = Block512>
 where
@@ -30,6 +33,7 @@ where
     text_with_rank_support: TextWithRankSupport<I, B>,
     suffix_array: SampledSuffixArray<I>,
     text_ids: TexdIdSearchTree,
+    lookup_tables: LookupTables<I>,
     _alphabet_marker: PhantomData<A>,
 }
 
@@ -50,6 +54,7 @@ impl<A: Alphabet, I: OutputElement, B: Block> FmIndex<A, I, B> {
         texts: impl IntoIterator<Item = T>,
         suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
+        lookup_table_depth: usize,
     ) -> Self {
         let DataStructures {
             count,
@@ -70,13 +75,22 @@ impl<A: Alphabet, I: OutputElement, B: Block> FmIndex<A, I, B> {
 
         let text_with_rank_support = TextWithRankSupport::construct(&bwt, A::SIZE);
 
-        FmIndex {
+        let mut index = FmIndex {
             count,
             text_with_rank_support,
             suffix_array: sampled_suffix_array,
             text_ids,
+            lookup_tables: LookupTables::new_empty(),
             _alphabet_marker: PhantomData,
-        }
+        };
+
+        lookup_table::fill_lookup_tables(
+            &mut index,
+            lookup_table_depth,
+            A::SIZE - A::NUM_SYMBOL_NOT_SEARCHED - 1,
+        );
+
+        index
     }
 }
 
@@ -87,6 +101,7 @@ impl<A: Alphabet, B: Block> FmIndex<A, u32, B> {
         texts: impl IntoIterator<Item = T>,
         suffix_array_construction_thread_count: u16,
         suffix_array_sampling_rate: usize,
+        lookup_table_depth: usize,
     ) -> Self {
         let DataStructures {
             count,
@@ -114,29 +129,37 @@ impl<A: Alphabet, B: Block> FmIndex<A, u32, B> {
 
         let text_with_rank_support = TextWithRankSupport::construct(&bwt, A::SIZE);
 
-        FmIndex {
+        let mut index = FmIndex {
             count,
             text_with_rank_support,
             suffix_array: sampled_suffix_array,
             text_ids,
+            lookup_tables: LookupTables::new_empty(),
             _alphabet_marker: PhantomData,
-        }
+        };
+
+        lookup_table::fill_lookup_tables(
+            &mut index,
+            lookup_table_depth,
+            A::SIZE - A::NUM_SYMBOL_NOT_SEARCHED - 1,
+        );
+
+        index
     }
 }
 
 impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
     pub fn count(&self, query: &[u8]) -> usize {
-        let (start, end) = self.search_suffix_array_interval(query);
+        let (start, end) = self.backwards_search_with_alphabet_translation(query);
         end - start
     }
 
     pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = Hit> {
-        let (start, end) = self.search_suffix_array_interval(query);
+        let (start, end) = self.backwards_search_with_alphabet_translation(query);
 
         self.suffix_array
             .recover_range(start..end, self)
             .map(|idx| {
-                // println!("concat text index: {idx}");
                 let (text_id, position) = self
                     .text_ids
                     .backtransfrom_concatenated_text_index(<usize as NumCast>::from(idx).unwrap());
@@ -146,16 +169,24 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
     }
 
     // returns half open interval [start, end)
-    fn search_suffix_array_interval(&self, query: &[u8]) -> (usize, usize) {
-        assert!(!query.is_empty());
-
-        let (mut start, mut end) = (0, self.text_with_rank_support.text_len());
-
-        for &character in query.iter().rev() {
-            let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[character as usize];
+    fn backwards_search_with_alphabet_translation(&self, query: &[u8]) -> (usize, usize) {
+        let iter = query.iter().rev().map(|&s| {
+            let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[s as usize];
             assert!(symbol != 255 && symbol != 0);
+            symbol
+        });
 
-            // it is assumed that the query doesn't contain the sentinel
+        self.search_in_order_dense_encoded(iter)
+    }
+
+    fn search_in_order_dense_encoded(
+        &self,
+        query: impl IntoIterator<Item = u8> + ExactSizeIterator + Clone,
+    ) -> (usize, usize) {
+        let lookup_depth = std::cmp::min(query.len(), self.lookup_tables.max_depth());
+        let (mut start, mut end) = self.lookup_tables.lookup(query.clone(), lookup_depth);
+
+        for symbol in query.into_iter().skip(lookup_depth) {
             start = self.lf_mapping_step(symbol, start);
             end = self.lf_mapping_step(symbol, end);
 

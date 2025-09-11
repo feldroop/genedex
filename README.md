@@ -15,7 +15,7 @@ Coming soon!
     - improved build memory usage (maybe a configurable, slower low memory mode): 
         - add u32 saca
         - BWT only as view optimization 
-        - suffix array compression using unconventional int widths (e.g. 33 bit)
+        - suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
     - paired blocks for less memory usage when using large alphabets (e.g. all possible u8 values)
 - Novel Features (implementation + API):
     - bidirectional FM-Index
