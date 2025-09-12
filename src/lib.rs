@@ -184,6 +184,37 @@ impl<A: Alphabet, I: IndexStorage, B: Block> FmIndex<A, I, B> {
     }
 }
 
+#[cfg(feature = "savefile")]
+impl<A: Alphabet, I: IndexStorage, B: Block> FmIndex<A, I, B> {
+    const VERSION_FOR_SAVEFILE: u32 = 0;
+
+    pub fn load_from_reader(
+        reader: &mut impl std::io::Read,
+    ) -> Result<Self, savefile::SavefileError> {
+        savefile::load(reader, Self::VERSION_FOR_SAVEFILE)
+    }
+
+    pub fn load_from_file(
+        filepath: impl AsRef<std::path::Path>,
+    ) -> Result<Self, savefile::SavefileError> {
+        savefile::load_file(filepath, Self::VERSION_FOR_SAVEFILE)
+    }
+
+    pub fn save_to_writer(
+        &self,
+        writer: &mut impl std::io::Write,
+    ) -> Result<(), savefile::SavefileError> {
+        savefile::save(writer, Self::VERSION_FOR_SAVEFILE, self)
+    }
+
+    pub fn save_to_file(
+        &self,
+        filepath: impl AsRef<std::path::Path>,
+    ) -> Result<(), savefile::SavefileError> {
+        savefile::save_file(filepath, Self::VERSION_FOR_SAVEFILE, self)
+    }
+}
+
 #[derive(Clone)]
 pub struct Cursor<'a, C, A, I, B> {
     index: &'a FmIndex<A, I, B>,
@@ -276,11 +307,23 @@ impl<'a, A: Alphabet, I: IndexStorage, B: Block> Cursor<'a, Init, A, I, B> {
     }
 }
 
-pub trait IndexStorage: PrimInt + Pod + 'static {}
+pub trait IndexStorage: PrimInt + Pod + maybe_savefile::MaybeSavefile + 'static {}
 
 impl IndexStorage for i32 {}
 impl IndexStorage for u32 {}
 impl IndexStorage for i64 {}
+
+mod maybe_savefile {
+    #[cfg(feature = "savefile")]
+    pub trait MaybeSavefile: savefile::Savefile {}
+
+    #[cfg(not(feature = "savefile"))]
+    pub trait MaybeSavefile {}
+
+    impl MaybeSavefile for i32 {}
+    impl MaybeSavefile for u32 {}
+    impl MaybeSavefile for i64 {}
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interval {

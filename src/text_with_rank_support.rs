@@ -4,6 +4,8 @@ use bitvec::prelude::*;
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 
+use crate::maybe_savefile::MaybeSavefile;
+
 // Interleaved means that the respective values for different symbols of the alphabet
 // for the same text position are next to each other.
 // Blocks must be interleaved for efficient queries.
@@ -190,7 +192,7 @@ fn fill_superblock<I: PrimInt, B: Block>(
 }
 
 // this distinction of block types only exists to be able to set repr(align(64)) for the 512 bit block
-pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync + 'static {
+pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync + MaybeSavefile + 'static {
     const NUM_BITS: usize;
     const NUM_BYTES: usize = Self::NUM_BITS / 8;
     const NUM_U64: usize = Self::NUM_BITS / 64;
@@ -245,6 +247,8 @@ pub struct Block512 {
 
 impl sealed::Sealed for Block512 {}
 
+impl MaybeSavefile for Block512 {}
+
 impl Block for Block512 {
     const NUM_BITS: usize = 512;
 
@@ -284,6 +288,8 @@ pub struct Block64 {
 }
 
 impl sealed::Sealed for Block64 {}
+
+impl MaybeSavefile for Block64 {}
 
 impl Block for Block64 {
     const NUM_BITS: usize = 64;
