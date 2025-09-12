@@ -17,6 +17,8 @@ pub use alphabet::Alphabet;
 #[doc(inline)]
 pub use text_with_rank_support::TextWithRankSupport;
 
+pub use libsais::OutputElement as LibsaisOutputElement;
+
 use construction::DataStructures;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
