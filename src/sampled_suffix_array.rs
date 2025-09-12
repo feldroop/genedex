@@ -1,15 +1,14 @@
-use bytemuck::Pod;
 use libsais::OutputElement;
-use num_traits::{NumCast, PrimInt};
+use num_traits::NumCast;
 
 use std::{collections::HashMap, marker::PhantomData, ops::Range};
 
-use crate::{alphabet::Alphabet, text_with_rank_support::Block};
+use crate::{IndexStorage, alphabet::Alphabet, text_with_rank_support::Block};
 
 use super::FmIndex;
 
-#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
-pub(crate) struct SampledSuffixArray<I: 'static> {
+#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
+pub(crate) struct SampledSuffixArray<I> {
     suffix_array_bytes: Vec<u8>,
     text_border_lookup: HashMap<usize, I>,
     sampling_rate: usize,
@@ -97,7 +96,7 @@ impl SampledSuffixArray<u32> {
     }
 }
 
-impl<I: PrimInt + Pod> SampledSuffixArray<I> {
+impl<I: IndexStorage> SampledSuffixArray<I> {
     pub(crate) fn recover_range<A: Alphabet, B: Block>(
         &self,
         range: Range<usize>,

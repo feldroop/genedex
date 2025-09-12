@@ -8,12 +8,9 @@ use rayon::prelude::*;
 // for the same text position are next to each other.
 // Blocks must be interleaved for efficient queries.
 // (Super)block offsets are only interleaved for faster (parallel) construction.
-#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
+#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug)]
-pub struct TextWithRankSupport<I: 'static, B = Block512>
-where
-    B: 'static,
-{
+pub struct TextWithRankSupport<I, B = Block512> {
     text_len: usize,
     alphabet_size: usize,
     interleaved_blocks: Vec<B>,
@@ -193,7 +190,7 @@ fn fill_superblock<I: PrimInt, B: Block>(
 }
 
 // this distinction of block types only exists to be able to set repr(align(64)) for the 512 bit block
-pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
+pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync + 'static {
     const NUM_BITS: usize;
     const NUM_BYTES: usize = Self::NUM_BITS / 8;
     const NUM_U64: usize = Self::NUM_BITS / 64;
@@ -233,10 +230,13 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync {
             .sum()
     }
 
+    // for some reason, a manuel implementation seemed to have a tiny benefit in benchmarks
+    // might be a benchmarking error, but the flamgegraph showed genereated code with atomics,
+    // that might be a reason.
     fn get_bit(&self, index: usize) -> u8;
 }
 
-#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
+#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone, Copy)]
 #[repr(align(64))]
 pub struct Block512 {
@@ -277,7 +277,7 @@ impl Block for Block512 {
     }
 }
 
-#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
+#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone, Copy)]
 pub struct Block64 {
     data: u64,

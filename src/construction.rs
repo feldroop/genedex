@@ -52,10 +52,10 @@ pub(crate) fn create_data_structures<A: Alphabet, I: OutputElement, T: AsRef<[u8
     }
 }
 
-fn create_concatenated_densely_encoded_text<S: OutputElement, T: AsRef<[u8]>>(
+fn create_concatenated_densely_encoded_text<I: OutputElement, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
     translation_table: &[u8; 256],
-) -> (Vec<u8>, Vec<S>, Vec<usize>) {
+) -> (Vec<u8>, Vec<I>, Vec<usize>) {
     // this generic texts owned vec is needed for the as_ref interface
     let generic_texts: Vec<_> = texts.into_iter().collect();
     let texts: Vec<&[u8]> = generic_texts.iter().map(|t| t.as_ref()).collect();
@@ -86,11 +86,11 @@ fn create_concatenated_densely_encoded_text<S: OutputElement, T: AsRef<[u8]>>(
         .into_par_iter()
         .zip(concatenated_text_splits)
         .map(|(text, concatenated_text_split)| {
-            let mut frequency_table = vec![S::zero(); 256];
+            let mut frequency_table = vec![I::zero(); 256];
 
             for (source, target) in text.iter().zip(concatenated_text_split) {
                 *target = translation_table[*source as usize];
-                frequency_table[*target as usize] = frequency_table[*target as usize] + S::one();
+                frequency_table[*target as usize] = frequency_table[*target as usize] + I::one();
             }
 
             frequency_table
@@ -98,12 +98,12 @@ fn create_concatenated_densely_encoded_text<S: OutputElement, T: AsRef<[u8]>>(
         .reduce_with(merge_frequency_tables)
         .expect("There should be at least one texts");
 
-    frequency_table[0] = <S as NumCast>::from(num_texts).unwrap();
+    frequency_table[0] = <I as NumCast>::from(num_texts).unwrap();
 
     (concatenated_text, frequency_table, sentinel_indices)
 }
 
-fn merge_frequency_tables<S: OutputElement>(mut f1: Vec<S>, f2: Vec<S>) -> Vec<S> {
+fn merge_frequency_tables<I: OutputElement>(mut f1: Vec<I>, f2: Vec<I>) -> Vec<I> {
     for (x1, x2) in f1.iter_mut().zip(f2) {
         *x1 = *x1 + x2;
     }
@@ -111,8 +111,8 @@ fn merge_frequency_tables<S: OutputElement>(mut f1: Vec<S>, f2: Vec<S>) -> Vec<S
     f1
 }
 
-fn frequency_table_to_count<S: OutputElement>(
-    frequency_table: &[S],
+fn frequency_table_to_count<I: OutputElement>(
+    frequency_table: &[I],
     alphabet_size: usize,
 ) -> Vec<usize> {
     let mut count: Vec<_> = frequency_table[..alphabet_size + 1]

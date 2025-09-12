@@ -24,11 +24,8 @@ use text_with_rank_support::{Block, Block512};
 
 use crate::lookup_table::LookupTables;
 
-#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
-pub struct FmIndex<A, I: 'static, B = Block512>
-where
-    B: 'static,
-{
+#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
+pub struct FmIndex<A, I, B = Block512> {
     count: Vec<usize>,
     text_with_rank_support: TextWithRankSupport<I, B>,
     suffix_array: SampledSuffixArray<I>,
@@ -47,7 +44,7 @@ pub type FmIndexI32<A, B = Block512> = FmIndex<A, i32, B>;
 pub type FmIndexU32<A, B = Block512> = FmIndex<A, u32, B>;
 pub type FmIndexI64<A, B = Block512> = FmIndex<A, i64, B>;
 
-impl<A: Alphabet, I: OutputElement, B: Block> FmIndex<A, I, B> {
+impl<A: Alphabet, I: OutputElement + IndexStorage, B: Block> FmIndex<A, I, B> {
     // text chars must be smaller than alphabet size and greater than 0
     // other operations use rayons configured number of threads
     pub fn new<T: AsRef<[u8]>>(
@@ -148,7 +145,7 @@ impl<A: Alphabet, B: Block> FmIndex<A, u32, B> {
     }
 }
 
-impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
+impl<A: Alphabet, I: IndexStorage, B: Block> FmIndex<A, I, B> {
     pub fn count(&self, query: &[u8]) -> usize {
         self.cursor().extend_back_to_front(query).count()
     }
@@ -188,13 +185,13 @@ impl<A: Alphabet, I: PrimInt + Pod + 'static, B: Block> FmIndex<A, I, B> {
 }
 
 #[derive(Clone)]
-pub struct Cursor<'a, C, A, I: 'static, B: 'static> {
+pub struct Cursor<'a, C, A, I, B> {
     index: &'a FmIndex<A, I, B>,
     interval: Interval,
     _marker: PhantomData<C>,
 }
 
-impl<'a, C: CursorState, A: Alphabet, I: PrimInt + Pod + 'static, B: Block> Cursor<'a, C, A, I, B> {
+impl<'a, C: CursorState, A: Alphabet, I: IndexStorage, B: Block> Cursor<'a, C, A, I, B> {
     pub fn extend_front(self, symbol: u8) -> Cursor<'a, StepsDone, A, I, B> {
         let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[symbol as usize];
         debug_assert!(symbol != 255 && symbol != 0);
@@ -240,7 +237,7 @@ impl<'a, C: CursorState, A: Alphabet, I: PrimInt + Pod + 'static, B: Block> Curs
     }
 }
 
-impl<'a, A: Alphabet, I: PrimInt + Pod + 'static, B: Block> Cursor<'a, Init, A, I, B> {
+impl<'a, A: Alphabet, I: IndexStorage, B: Block> Cursor<'a, Init, A, I, B> {
     pub fn extend_back_to_front(self, query: &[u8]) -> Cursor<'a, StepsDone, A, I, B> {
         let query_iter = query.iter().rev().map(|&s| {
             let symbol = A::DENSE_ENCODING_TRANSLATION_TABLE[s as usize];
@@ -278,6 +275,12 @@ impl<'a, A: Alphabet, I: PrimInt + Pod + 'static, B: Block> Cursor<'a, Init, A, 
         cursor
     }
 }
+
+pub trait IndexStorage: PrimInt + Pod + 'static {}
+
+impl IndexStorage for i32 {}
+impl IndexStorage for u32 {}
+impl IndexStorage for i64 {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interval {

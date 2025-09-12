@@ -9,8 +9,7 @@ num-traits = "0.2.19"
 rayon = "1.11"
 bytemuck = "1.23.2"
 bitvec = "1"
-savefile-derive = { version = "0.19", optional = true }
-savefile = { version = "0.19", optional = true }
+savefile = { version = "0.20", optional = true, features = ["derive"] }
 memchr = "2.7"
 
 [dev-dependencies]
@@ -20,7 +19,7 @@ rand_chacha = "0.9.0"
 
 [features]
 default = []
-savefile = ["dep:savefile-derive", "dep:savefile"]
+savefile = ["dep:savefile"]
 
 # optimize code for faster proptesting (needs to be removed when debugging tests)
 [profile.test]

@@ -1,16 +1,15 @@
-use bytemuck::Pod;
-use num_traits::{NumCast, PrimInt};
+use num_traits::NumCast;
 
-use crate::{Alphabet, FmIndex, text_with_rank_support::Block};
+use crate::{Alphabet, FmIndex, IndexStorage, text_with_rank_support::Block};
 
-#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
+#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug)]
-pub(crate) struct LookupTables<I: 'static> {
+pub(crate) struct LookupTables<I> {
     num_symbols: usize,
     tables: Vec<LookupTable<I>>,
 }
 
-impl<I: PrimInt + Pod + 'static> LookupTables<I> {
+impl<I: IndexStorage> LookupTables<I> {
     pub(crate) fn new_empty() -> Self {
         Self {
             num_symbols: 0,
@@ -31,7 +30,7 @@ impl<I: PrimInt + Pod + 'static> LookupTables<I> {
     }
 }
 
-pub(crate) fn fill_lookup_tables<A: Alphabet, I: PrimInt + Pod + 'static, B: Block>(
+pub(crate) fn fill_lookup_tables<A: Alphabet, I: IndexStorage, B: Block>(
     index: &mut FmIndex<A, I, B>,
     max_depth: usize,
     num_symbols: usize,
@@ -47,14 +46,14 @@ pub(crate) fn fill_lookup_tables<A: Alphabet, I: PrimInt + Pod + 'static, B: Blo
     }
 }
 
-#[cfg_attr(feature = "savefile", derive(savefile_derive::Savefile))]
+#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug)]
-struct LookupTable<I: 'static> {
+struct LookupTable<I> {
     data: Vec<(I, I)>,
     depth: usize,
 }
 
-impl<I: PrimInt + Pod + 'static> LookupTable<I> {
+impl<I: IndexStorage> LookupTable<I> {
     fn new<A: Alphabet, B: Block>(
         depth: usize,
         num_symbols: usize,
@@ -98,7 +97,7 @@ impl<I: PrimInt + Pod + 'static> LookupTable<I> {
     }
 }
 
-fn fill_table<A: Alphabet, I: PrimInt + Pod + 'static, B: Block>(
+fn fill_table<A: Alphabet, I: IndexStorage, B: Block>(
     curr_depth: usize,
     max_depth: usize,
     num_symbols: usize,
