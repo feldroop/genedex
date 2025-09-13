@@ -9,6 +9,7 @@ Coming soon!
     - better API for alphabets
     - more alphabets + better test coverage for different alphabets
     - gate rayon/OpenMP usage behind feature flag (enabled by default)
+    - add text recovery features to public API
 - Optimization ideas for existing features:
     - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome),
     - improved build memory usage (maybe a configurable, slower low memory mode): 
@@ -18,6 +19,7 @@ Coming soon!
     - paired blocks for less memory usage when using larger alphabets (such as all possible u8 values except 0)
 - Novel features (implementation + API):
     - bidirectional FM-Index
+    - FMD-Index
     - searches with errors and "degenerate" chars as in IUPAC fasta definition (using search schemes)
     - optimized version for single text without sentinel
     - text sampled suffix array (maybe with text ids and other annotations),
