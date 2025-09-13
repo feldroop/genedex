@@ -24,3 +24,4 @@ Coming soon!
     - optimized version for single text without sentinel
     - text sampled suffix array (maybe with text ids and other annotations),
     - optimized construction directly from (fasta) file reader
+    - optimizations for hingly repetitive texts such as run length encoding
