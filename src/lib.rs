@@ -22,12 +22,12 @@ pub use libsais::OutputElement as LibsaisOutputElement;
 use construction::DataStructures;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
-use text_with_rank_support::{Block, Block512};
+use text_with_rank_support::{Block, Block64};
 
 use crate::lookup_table::LookupTables;
 
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-pub struct FmIndex<A, I, B = Block512> {
+pub struct FmIndex<A, I, B = Block64> {
     count: Vec<usize>,
     text_with_rank_support: TextWithRankSupport<I, B>,
     suffix_array: SampledSuffixArray<I>,
@@ -42,9 +42,9 @@ pub struct Hit {
     pub position: usize,
 }
 
-pub type FmIndexI32<A, B = Block512> = FmIndex<A, i32, B>;
-pub type FmIndexU32<A, B = Block512> = FmIndex<A, u32, B>;
-pub type FmIndexI64<A, B = Block512> = FmIndex<A, i64, B>;
+pub type FmIndexI32<A, B = Block64> = FmIndex<A, i32, B>;
+pub type FmIndexU32<A, B = Block64> = FmIndex<A, u32, B>;
+pub type FmIndexI64<A, B = Block64> = FmIndex<A, i64, B>;
 
 impl<A: Alphabet, I: OutputElement + IndexStorage, B: Block> FmIndex<A, I, B> {
     // text chars must be smaller than alphabet size and greater than 0
