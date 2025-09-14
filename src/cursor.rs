@@ -9,7 +9,7 @@ pub struct Cursor<'a, C, I, B> {
 }
 
 impl<'a, C: CursorState, I: IndexStorage, B: Block> Cursor<'a, C, I, B> {
-    pub fn extend_front(self, symbol: u8) -> Cursor<'a, StepsDone, I, B> {
+    pub fn extend_front(self, symbol: u8) -> Cursor<'a, AfterSteps, I, B> {
         let symbol = self.index.alphabet.io_to_dense_representation(symbol);
         debug_assert!(symbol != 255 && symbol != 0);
 
@@ -19,7 +19,7 @@ impl<'a, C: CursorState, I: IndexStorage, B: Block> Cursor<'a, C, I, B> {
     pub(crate) fn extend_front_without_alphabet_translation(
         self,
         symbol: u8,
-    ) -> Cursor<'a, StepsDone, I, B> {
+    ) -> Cursor<'a, AfterSteps, I, B> {
         let (start, end) = if self.interval.start != self.interval.end {
             (
                 self.index.lf_mapping_step(symbol, self.interval.start),
@@ -66,7 +66,7 @@ impl<'a, I: IndexStorage, B: Block> Cursor<'a, Init, I, B> {
         }
     }
 
-    pub fn extend_back_to_front(self, query: &[u8]) -> Cursor<'a, StepsDone, I, B> {
+    pub fn extend_front_many_backwards(self, query: &[u8]) -> Cursor<'a, AfterSteps, I, B> {
         let query_iter = query.iter().rev().map(|&s| {
             let symbol = self.index.alphabet.io_to_dense_representation(s);
             symbol
@@ -78,7 +78,7 @@ impl<'a, I: IndexStorage, B: Block> Cursor<'a, Init, I, B> {
     pub(crate) fn extend_iter_without_alphabet_translation(
         self,
         query: impl IntoIterator<Item = u8> + ExactSizeIterator + Clone,
-    ) -> Cursor<'a, StepsDone, I, B> {
+    ) -> Cursor<'a, AfterSteps, I, B> {
         let lookup_depth = std::cmp::min(query.len(), self.index.lookup_tables.max_depth());
         let (start, end) = self
             .index
@@ -112,7 +112,7 @@ mod typestate {
 
     impl CursorState for Init {}
 
-    pub struct StepsDone {}
+    pub struct AfterSteps {}
 
-    impl CursorState for StepsDone {}
+    impl CursorState for AfterSteps {}
 }

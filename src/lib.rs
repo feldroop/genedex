@@ -17,10 +17,12 @@ pub use alphabet::Alphabet;
 #[doc(inline)]
 pub use config::FmIndexConfig;
 #[doc(inline)]
+pub use cursor::Cursor;
+#[doc(inline)]
 pub use text_with_rank_support::TextWithRankSupport;
 
 use construction::DataStructures;
-use cursor::{Cursor, Init};
+use cursor::Init;
 use lookup_table::LookupTables;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
@@ -85,11 +87,11 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     }
 
     pub fn count(&self, query: &[u8]) -> usize {
-        self.cursor().extend_back_to_front(query).count()
+        self.cursor().extend_front_many_backwards(query).count()
     }
 
     pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = Hit> {
-        let cursor = self.cursor().extend_back_to_front(query);
+        let cursor = self.cursor().extend_front_many_backwards(query);
 
         self.locate_interval(cursor.interval())
     }
