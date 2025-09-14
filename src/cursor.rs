@@ -66,16 +66,16 @@ impl<'a, I: IndexStorage, B: Block> Cursor<'a, Init, I, B> {
         }
     }
 
-    pub fn extend_front_many_backwards(self, query: &[u8]) -> Cursor<'a, AfterSteps, I, B> {
-        let query_iter = query.iter().rev().map(|&s| {
-            let symbol = self.index.alphabet.io_to_dense_representation(s);
-            symbol
-        });
+    pub fn search(self, query: &[u8]) -> Cursor<'a, AfterSteps, I, B> {
+        let query_iter = query
+            .iter()
+            .rev()
+            .map(|&s| self.index.alphabet.io_to_dense_representation(s));
 
-        self.extend_iter_without_alphabet_translation(query_iter)
+        self.search_iter_without_alphabet_translation(query_iter)
     }
 
-    pub(crate) fn extend_iter_without_alphabet_translation(
+    pub(crate) fn search_iter_without_alphabet_translation(
         self,
         query: impl IntoIterator<Item = u8> + ExactSizeIterator + Clone,
     ) -> Cursor<'a, AfterSteps, I, B> {

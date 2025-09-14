@@ -87,11 +87,11 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     }
 
     pub fn count(&self, query: &[u8]) -> usize {
-        self.cursor().extend_front_many_backwards(query).count()
+        self.cursor().search(query).count()
     }
 
     pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = Hit> {
-        let cursor = self.cursor().extend_front_many_backwards(query);
+        let cursor = self.cursor().search(query);
 
         self.locate_interval(cursor.interval())
     }
