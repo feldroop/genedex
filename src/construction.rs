@@ -4,34 +4,44 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 use crate::alphabet::Alphabet;
+use crate::sampled_suffix_array::SampledSuffixArray;
 use crate::text_id_search_tree::TexdIdSearchTree;
+use crate::text_with_rank_support::Block;
+use crate::{IndexStorage, TextWithRankSupport};
 
-pub(crate) struct DataStructures<I> {
+pub(crate) struct DataStructures<I, B> {
     pub(crate) count: Vec<usize>,
-    pub(crate) suffix_array_bytes: Vec<u8>,
-    pub(crate) bwt: Vec<u8>,
+    pub(crate) sampled_suffix_array: SampledSuffixArray<I>,
     pub(crate) text_ids: TexdIdSearchTree,
-    pub(crate) text_border_lookup: HashMap<usize, I>,
+    pub(crate) text_with_rank_support: TextWithRankSupport<I, B>,
 }
 
-pub(crate) fn create_data_structures<A: Alphabet, I: OutputElement, T: AsRef<[u8]>>(
+pub(crate) fn create_data_structures<I: IndexStorage, B: Block, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
-    suffix_array_construction_thread_count: u16,
-) -> DataStructures<I> {
+    suffix_array_sampling_rate: usize,
+    alphabet: &Alphabet,
+) -> DataStructures<I, B> {
     let (text, mut frequency_table, sentinel_indices) =
-        create_concatenated_densely_encoded_text(texts, &A::DENSE_ENCODING_TRANSLATION_TABLE);
+        create_concatenated_densely_encoded_text(texts, alphabet);
+
+    assert!(text.len() <= <usize as NumCast>::from(I::max_value()).unwrap());
 
     let text_ids = TexdIdSearchTree::new_from_sentinel_indices(sentinel_indices);
 
-    let count = frequency_table_to_count(&frequency_table, A::SIZE);
+    let count = frequency_table_to_count(&frequency_table, alphabet.size());
 
     // allocate the buffer in bytes, because maybe we want to muck around with integer types later (compress i64 into u32)
-    let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<I>()];
-    let suffix_array_buffer: &mut [I] = bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+    let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<I::LibsaisOutput>()];
+    let suffix_array_buffer: &mut [I::LibsaisOutput] =
+        bytemuck::cast_slice_mut(&mut suffix_array_bytes);
 
     let mut construction = libsais::SuffixArrayConstruction::for_text(&text)
         .in_borrowed_buffer(suffix_array_buffer)
-        .multi_threaded(ThreadCount::fixed(suffix_array_construction_thread_count));
+        .multi_threaded(ThreadCount::fixed(
+            rayon::current_num_threads()
+                .try_into()
+                .expect("Number of threads should fit into u16"),
+        ));
 
     unsafe {
         construction = construction.with_frequency_table(&mut frequency_table);
@@ -43,18 +53,25 @@ pub(crate) fn create_data_structures<A: Alphabet, I: OutputElement, T: AsRef<[u8
 
     let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
 
+    let sampled_suffix_array = I::sample_suffix_array(
+        suffix_array_bytes,
+        suffix_array_sampling_rate,
+        text_border_lookup,
+    );
+
+    let text_with_rank_support = TextWithRankSupport::construct(&bwt, alphabet.size());
+
     DataStructures {
         count,
-        suffix_array_bytes,
-        bwt,
+        sampled_suffix_array,
         text_ids,
-        text_border_lookup,
+        text_with_rank_support,
     }
 }
 
 fn create_concatenated_densely_encoded_text<I: OutputElement, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
-    translation_table: &[u8; 256],
+    alphabet: &Alphabet,
 ) -> (Vec<u8>, Vec<I>, Vec<usize>) {
     // this generic texts owned vec is needed for the as_ref interface
     let generic_texts: Vec<_> = texts.into_iter().collect();
@@ -89,7 +106,7 @@ fn create_concatenated_densely_encoded_text<I: OutputElement, T: AsRef<[u8]>>(
             let mut frequency_table = vec![I::zero(); 256];
 
             for (source, target) in text.iter().zip(concatenated_text_split) {
-                *target = translation_table[*source as usize];
+                *target = alphabet.io_to_dense_representation(*source);
                 frequency_table[*target as usize] = frequency_table[*target as usize] + I::one();
             }
 
@@ -131,8 +148,8 @@ fn frequency_table_to_count<I: OutputElement>(
     count
 }
 
-fn bwt_from_suffix_array<I: OutputElement>(
-    suffix_array: &[I],
+fn bwt_from_suffix_array<I: IndexStorage>(
+    suffix_array: &[I::LibsaisOutput],
     text: &[u8],
 ) -> (Vec<u8>, HashMap<usize, I>) {
     let mut bwt = vec![0; text.len()];
@@ -172,10 +189,12 @@ fn bwt_from_suffix_array<I: OutputElement>(
                     }
 
                     for i in memchr::memchr_iter(0, inner_bwt_chunk) {
-                        let text_border_index = outer_chunk_size * outer_chunk_index
+                        let suffix_array_index = outer_chunk_size * outer_chunk_index
                             + inner_chunk_size * inner_chunk_index
                             + i;
-                        text_border_lookup.insert(text_border_index, inner_suffix_array_chunk[i]);
+
+                        let text_index = <I as NumCast>::from(inner_suffix_array_chunk[i]).unwrap();
+                        text_border_lookup.insert(suffix_array_index, text_index);
                     }
                 }
 
@@ -201,11 +220,9 @@ mod tests {
     #[test]
     fn concat_text() {
         let texts = [b"cccaaagggttt".as_slice(), b"acgtacgtacgt"];
+        let alph = alphabet::ascii_dna();
         let (text, frequency_table, sentinel_indices) =
-            create_concatenated_densely_encoded_text::<i32, _>(
-                texts,
-                &alphabet::ASCII_DNA_TRANSLATION_TABLE,
-            );
+            create_concatenated_densely_encoded_text::<i32, _>(texts, &alph);
 
         assert_eq!(
             text,

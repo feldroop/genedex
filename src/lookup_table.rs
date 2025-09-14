@@ -1,6 +1,6 @@
 use num_traits::NumCast;
 
-use crate::{Alphabet, FmIndex, IndexStorage, text_with_rank_support::Block};
+use crate::{FmIndex, IndexStorage, text_with_rank_support::Block};
 
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug)]
@@ -30,8 +30,8 @@ impl<I: IndexStorage> LookupTables<I> {
     }
 }
 
-pub(crate) fn fill_lookup_tables<A: Alphabet, I: IndexStorage, B: Block>(
-    index: &mut FmIndex<A, I, B>,
+pub(crate) fn fill_lookup_tables<I: IndexStorage, B: Block>(
+    index: &mut FmIndex<I, B>,
     max_depth: usize,
     num_symbols: usize,
 ) {
@@ -54,11 +54,7 @@ struct LookupTable<I> {
 }
 
 impl<I: IndexStorage> LookupTable<I> {
-    fn new<A: Alphabet, B: Block>(
-        depth: usize,
-        num_symbols: usize,
-        index: &FmIndex<A, I, B>,
-    ) -> Self {
+    fn new<B: Block>(depth: usize, num_symbols: usize, index: &FmIndex<I, B>) -> Self {
         let num_values = num_symbols.pow(depth as u32);
         let mut data = vec![(I::zero(), I::zero()); num_values];
 
@@ -97,14 +93,14 @@ impl<I: IndexStorage> LookupTable<I> {
     }
 }
 
-fn fill_table<A: Alphabet, I: IndexStorage, B: Block>(
+fn fill_table<I: IndexStorage, B: Block>(
     curr_depth: usize,
     max_depth: usize,
     num_symbols: usize,
     curr_data_idx: usize,
     data: &mut [(I, I)],
     query: &mut [u8],
-    index: &FmIndex<A, I, B>,
+    index: &FmIndex<I, B>,
 ) {
     if curr_depth == max_depth {
         for symbol in 0..num_symbols {

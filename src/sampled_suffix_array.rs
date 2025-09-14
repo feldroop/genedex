@@ -3,12 +3,12 @@ use num_traits::NumCast;
 
 use std::{collections::HashMap, marker::PhantomData, ops::Range};
 
-use crate::{IndexStorage, alphabet::Alphabet, text_with_rank_support::Block};
+use crate::{IndexStorage, text_with_rank_support::Block};
 
 use super::FmIndex;
 
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-pub(crate) struct SampledSuffixArray<I> {
+pub struct SampledSuffixArray<I> {
     suffix_array_bytes: Vec<u8>,
     text_border_lookup: HashMap<usize, I>,
     sampling_rate: usize,
@@ -97,10 +97,10 @@ impl SampledSuffixArray<u32> {
 }
 
 impl<I: IndexStorage> SampledSuffixArray<I> {
-    pub(crate) fn recover_range<A: Alphabet, B: Block>(
+    pub(crate) fn recover_range<B: Block>(
         &self,
         range: Range<usize>,
-        index: &FmIndex<A, I, B>,
+        index: &FmIndex<I, B>,
     ) -> impl Iterator<Item = usize> {
         range.map(|mut i| {
             let mut num_steps_done = I::zero();
@@ -128,14 +128,21 @@ impl<I: IndexStorage> SampledSuffixArray<I> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{FmIndexI32, alphabet::AsciiDnaWithN};
+    use crate::{FmIndexConfig, alphabet};
     use proptest::prelude::*;
 
     fn copied_and_recovered_array_must_equal<T: AsRef<[u8]>>(texts: &[T], sampling_rate: usize) {
         let n: usize = texts.iter().map(|t| t.as_ref().len()).sum();
 
-        let sampled_index = FmIndexI32::<AsciiDnaWithN>::new(texts, 1, sampling_rate, 4);
-        let index = FmIndexI32::<AsciiDnaWithN>::new(texts, 1, 1, 4);
+        let alphabet = alphabet::ascii_dna_with_n();
+        let sampled_index = FmIndexConfig::<i32>::new()
+            .lookup_table_depth(4)
+            .suffix_array_sampling_rate(sampling_rate)
+            .construct(texts, alphabet.clone());
+        let index = FmIndexConfig::<i32>::new()
+            .lookup_table_depth(4)
+            .suffix_array_sampling_rate(1)
+            .construct(texts, alphabet);
 
         let recovered_array: Vec<_> = sampled_index
             .suffix_array
