@@ -9,6 +9,7 @@ Coming soon!
     - u32 saca (maybe sais-drum)
     - BWT view optimization
     - suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
+    - maybe compress compress text and/or bwt at some point during construction 
 - optimized version for single text without sentinel
 - optimized construction directly from (fasta) file reader
 - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome)
