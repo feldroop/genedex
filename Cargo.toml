@@ -1,6 +1,21 @@
 [package]
 name = "genedex"
 version = "0.1.0"
+authors = ["Felix Leander Droop <info@felix-droop.de>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/feldroop/genedex"
+documentation = "https://docs.rs/genedex"
+homepage = "https://github.com/feldroop/genedex"
+description = "A small and fast FM-Index implementation"
+categories = [
+    "science::bioinformatics",
+    "science::bioinformatics::sequence-analysis",
+    "text-processing",
+    "algorithms",
+    "data-structures",
+]
+keywords = ["fmindex", "fm-index", "bioinformatics", "bio", "text-index"]
 edition = "2024"
 
 [dependencies]
