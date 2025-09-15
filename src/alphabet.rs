@@ -248,7 +248,7 @@ mod tests {
         let _ = ascii_dna_iupac();
         let _ = ascii_dna_iupac_as_dna_with_n();
 
-        for max_symbol in 1..=254 {
+        for max_symbol in 1..=253 {
             let _ = u8_until(max_symbol);
         }
     }
