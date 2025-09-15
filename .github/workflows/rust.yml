@@ -28,3 +28,4 @@ jobs:
     - name: Examples
       run: |
         cargo run --example custom_alphabet
+        cargo run --example basic_usage

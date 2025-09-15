@@ -19,13 +19,16 @@ keywords = ["fmindex", "fm-index", "bioinformatics", "bio", "text-index"]
 edition = "2024"
 
 [dependencies]
-libsais = "0.2.0"
 num-traits = "0.2.19"
-rayon = "1.11"
-bytemuck = "1.23.2"
+libsais = "0.2.0"
 bitvec = "1"
-savefile = { version = "0.20", optional = true, features = ["derive"] }
+bytemuck = "1.23.2"
 memchr = "2.7"
+
+# would be nice to have behind a feature flag in the future (together with libsais OpenMP support)
+rayon = "1.11"
+
+savefile = { version = "0.20", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 proptest = "1.6.0"
