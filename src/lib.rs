@@ -1,39 +1,46 @@
 /*! This library contains an implementation of the FM-Index data structure ([original paper]).
-*
-* It is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
-* by Simon Gene Gottlieb (publication pending). This encoding attemps to provide a good trade-off between
-* memory usage and running time of queries.
-*
-* The library supports creating an FM-Index for a set of texts over an [alphabet]. The index construction
-* is based on the [`libsais-rs`] crate and parallelized.
-*
-* The following is a basic example of how to use this library:
-*
-* ```
-* use genedex::{FmIndexConfig, alphabet};
-*
-* let dna_n_alphabet = alphabet::ascii_dna_with_n();
-* let texts = [b"aACGT", b"acGtn"];
-*
-* let index = FmIndexConfig::<i32>::new().construct_index(texts, dna_n_alphabet);
-*
-* let query = b"GT";
-* assert_eq!(index.count(query), 2);
-*
-* for hit in index.locate(query) {
-*     println!(
-*         "Found query in text {} at position {}.",
-*         hit.text_id, hit.position
-*     );
-* }
-* ```
-*
-* More information about the flexible [cursor](Cursor) API, build [configuration](FmIndexConfig) and [variants](block) of the FM-Index can
-* be found in the module-level and struct-level documentation.
-*
-* [original paper]: https://doi.org/10.1109/SFCS.2000.892127
-* [`libsais-rs`]: (https://github.com/feldroop/libsais-rs)
-*/
+ *
+ * It is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
+ * by Simon Gene Gottlieb (publication pending). This encoding attemps to provide a good trade-off between
+ * memory usage and running time of queries.
+ *
+ * The library supports creating an FM-Index for a set of texts over an [alphabet]. The index construction
+ * is based on the [`libsais-rs`] crate and parallelized.
+ *
+ * The following is a basic example of how to use this library:
+ *
+ * ```
+ * use genedex::{FmIndexConfig, alphabet};
+ *
+ * let dna_n_alphabet = alphabet::ascii_dna_with_n();
+ * let texts = [b"aACGT", b"acGtn"];
+ *
+ * let index = FmIndexConfig::<i32>::new().construct_index(texts, dna_n_alphabet);
+ *
+ * let query = b"GT";
+ * assert_eq!(index.count(query), 2);
+ *
+ * for hit in index.locate(query) {
+ *     println!(
+ *         "Found query in text {} at position {}.",
+ *         hit.text_id, hit.position
+ *     );
+ * }
+ * ```
+ *
+ * More information about the flexible [cursor](Cursor) API, build [configuration](FmIndexConfig) and [variants](block) of the FM-Index can
+ * be found in the module-level and struct-level documentation.
+ *
+ * <div class="warning">
+ *
+ * This library is in an early stage. The API is still subject to changes.
+ * Any kind of feedback and suggestions via the issue tracker is highly appreciated!
+ *
+ * </div>
+ *
+ * [original paper]: https://doi.org/10.1109/SFCS.2000.892127
+ * [`libsais-rs`]: https://github.com/feldroop/libsais-rs
+ */
 
 /// Contains functions to create various commonly used alphabets.
 pub mod alphabet;
