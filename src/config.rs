@@ -45,7 +45,7 @@ impl<I: IndexStorage, B: Block> Default for FmIndexConfig<I, B> {
     fn default() -> Self {
         Self {
             suffix_array_sampling_rate: 4,
-            lookup_table_depth: 10,
+            lookup_table_depth: 8,
             _index_storage_marker: PhantomData,
             _block_marker: PhantomData,
         }

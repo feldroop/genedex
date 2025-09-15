@@ -27,5 +27,7 @@ jobs:
       run: cargo doc
     - name: Examples
       run: |
-        cargo run --example custom_alphabet
         cargo run --example basic_usage
+        cargo run --example custom_alphabet
+        cargo run --example cursor
+        cargo run --example text_with_rank_support

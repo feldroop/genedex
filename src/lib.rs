@@ -23,7 +23,6 @@ pub use cursor::Cursor;
 pub use text_with_rank_support::TextWithRankSupport;
 
 use construction::DataStructures;
-use cursor::Init;
 use lookup_table::LookupTables;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
@@ -75,11 +74,11 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     }
 
     pub fn count(&self, query: &[u8]) -> usize {
-        self.cursor().search(query).count()
+        self.cursor_for_query(query).count()
     }
 
     pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = Hit> {
-        let cursor = self.cursor().search(query);
+        let cursor = self.cursor_for_query(query);
 
         self.locate_interval(cursor.interval())
     }
@@ -96,8 +95,48 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
             })
     }
 
-    pub fn cursor<'a>(&'a self) -> Cursor<'a, Init, I, B> {
-        Cursor::new(self, self.text_with_rank_support.text_len())
+    pub fn cursor_empty<'a>(&'a self) -> Cursor<'a, I, B> {
+        Cursor {
+            index: self,
+            interval: HalfOpenInterval {
+                start: 0,
+                end: self.text_with_rank_support.text_len(),
+            },
+        }
+    }
+
+    pub fn cursor_for_query<'a>(&'a self, query: &[u8]) -> Cursor<'a, I, B> {
+        let query_iter = query
+            .iter()
+            .rev()
+            .map(|&s| self.alphabet.io_to_dense_representation(s));
+
+        self.cursor_for_iter_without_alphabet_translation(query_iter)
+    }
+
+    fn cursor_for_iter_without_alphabet_translation<'a>(
+        &'a self,
+        query: impl IntoIterator<Item = u8> + ExactSizeIterator + Clone,
+    ) -> Cursor<'a, I, B> {
+        let lookup_depth = std::cmp::min(query.len(), self.lookup_tables.max_depth());
+        let (start, end) = self
+            .lookup_tables
+            .lookup(query.clone().into_iter(), lookup_depth);
+
+        let mut cursor = Cursor {
+            index: self,
+            interval: HalfOpenInterval { start, end },
+        };
+
+        for symbol in query.into_iter().skip(lookup_depth) {
+            cursor.extend_front_without_alphabet_translation(symbol);
+
+            if cursor.is_empty() {
+                break;
+            }
+        }
+
+        cursor
     }
 
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {

@@ -106,8 +106,7 @@ fn fill_table<I: IndexStorage, B: Block>(
         for symbol in 0..num_symbols {
             query[curr_depth - 1] = symbol as u8 + 1; // +1 to offset sentinel
             let interval = index
-                .cursor()
-                .search_iter_without_alphabet_translation(query.iter().copied())
+                .cursor_for_iter_without_alphabet_translation(query.iter().copied())
                 .interval();
             data[curr_data_idx + symbol] = (
                 <I as NumCast>::from(interval.start).unwrap(),
