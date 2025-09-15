@@ -44,7 +44,7 @@ for hit in index.locate(query) {
 
 Work in progress. Can be found [here](https://github.com/feldroop/rust-fmindex-benchmark)
 
-## Possible future extensions and improvements (roughly in order of priority):
+## Possible Future Extensions and Improvements (roughly in order of priority):
 
 - improved build memory usage: 
     - configurable, slower low memory mode
