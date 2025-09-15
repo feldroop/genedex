@@ -7,7 +7,7 @@ use crate::alphabet::Alphabet;
 use crate::sampled_suffix_array::SampledSuffixArray;
 use crate::text_id_search_tree::TexdIdSearchTree;
 use crate::text_with_rank_support::Block;
-use crate::{IndexStorage, TextWithRankSupport};
+use crate::{FmIndexConfig, IndexStorage, TextWithRankSupport};
 
 pub(crate) struct DataStructures<I, B> {
     pub(crate) count: Vec<usize>,
@@ -18,7 +18,7 @@ pub(crate) struct DataStructures<I, B> {
 
 pub(crate) fn create_data_structures<I: IndexStorage, B: Block, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
-    suffix_array_sampling_rate: usize,
+    config: FmIndexConfig<I, B>,
     alphabet: &Alphabet,
 ) -> DataStructures<I, B> {
     let (text, mut frequency_table, sentinel_indices) =
@@ -55,7 +55,7 @@ pub(crate) fn create_data_structures<I: IndexStorage, B: Block, T: AsRef<[u8]>>(
 
     let sampled_suffix_array = I::sample_suffix_array(
         suffix_array_bytes,
-        suffix_array_sampling_rate,
+        config.suffix_array_sampling_rate,
         text_border_lookup,
     );
 

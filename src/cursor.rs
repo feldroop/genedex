@@ -1,7 +1,7 @@
 use crate::{FmIndex, HalfOpenInterval, Hit, IndexStorage, text_with_rank_support::Block};
 use std::marker::PhantomData;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Cursor<'a, C, I, B> {
     index: &'a FmIndex<I, B>,
     interval: HalfOpenInterval,

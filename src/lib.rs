@@ -39,37 +39,20 @@ pub struct FmIndex<I, B = Block64> {
     lookup_tables: LookupTables<I>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Hit {
-    pub text_id: usize,
-    pub position: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HalfOpenInterval {
-    pub start: usize,
-    pub end: usize,
-}
-
 impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     // text chars must be smaller than alphabet size and greater than 0
     // other operations use rayons configured number of threads
     fn new<T: AsRef<[u8]>>(
         texts: impl IntoIterator<Item = T>,
         alphabet: Alphabet,
-        suffix_array_sampling_rate: usize,
-        lookup_table_depth: usize,
+        config: FmIndexConfig<I, B>,
     ) -> Self {
         let DataStructures {
             count,
             sampled_suffix_array,
             text_ids,
             text_with_rank_support,
-        } = construction::create_data_structures::<I, B, T>(
-            texts,
-            suffix_array_sampling_rate,
-            &alphabet,
-        );
+        } = construction::create_data_structures::<I, B, T>(texts, config, &alphabet);
 
         let num_searchable_symbols = alphabet.num_searchable_symbols();
 
@@ -82,7 +65,11 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
             lookup_tables: LookupTables::new_empty(),
         };
 
-        lookup_table::fill_lookup_tables(&mut index, lookup_table_depth, num_searchable_symbols);
+        lookup_table::fill_lookup_tables(
+            &mut index,
+            config.lookup_table_depth,
+            num_searchable_symbols,
+        );
 
         index
     }
@@ -147,6 +134,18 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     ) -> Result<(), savefile::SavefileError> {
         savefile::save_file(filepath, Self::VERSION_FOR_SAVEFILE, self)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Hit {
+    pub text_id: usize,
+    pub position: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HalfOpenInterval {
+    pub start: usize,
+    pub end: usize,
 }
 
 pub trait IndexStorage:

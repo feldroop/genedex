@@ -4,9 +4,10 @@ use crate::{
 };
 use std::marker::PhantomData;
 
+#[derive(Clone, Copy)]
 pub struct FmIndexConfig<I, B = Block64> {
-    suffix_array_sampling_rate: usize,
-    lookup_table_depth: usize,
+    pub(crate) suffix_array_sampling_rate: usize,
+    pub(crate) lookup_table_depth: usize,
     _index_storage_marker: PhantomData<I>,
     _block_marker: PhantomData<B>,
 }
@@ -17,27 +18,26 @@ impl<I: IndexStorage, B: Block> FmIndexConfig<I, B> {
         Self::default()
     }
 
-    pub fn suffix_array_sampling_rate(&mut self, suffix_array_sampling_rate: usize) -> &mut Self {
-        self.suffix_array_sampling_rate = suffix_array_sampling_rate;
-        self
+    pub fn suffix_array_sampling_rate(self, suffix_array_sampling_rate: usize) -> Self {
+        Self {
+            suffix_array_sampling_rate,
+            ..self
+        }
     }
 
-    pub fn lookup_table_depth(&mut self, lookup_table_depth: usize) -> &mut Self {
-        self.lookup_table_depth = lookup_table_depth;
-        self
+    pub fn lookup_table_depth(self, lookup_table_depth: usize) -> Self {
+        Self {
+            lookup_table_depth,
+            ..self
+        }
     }
 
     pub fn construct<T: AsRef<[u8]>>(
-        &mut self,
+        self,
         texts: impl IntoIterator<Item = T>,
         alphabet: Alphabet,
     ) -> FmIndex<I, B> {
-        FmIndex::new(
-            texts,
-            alphabet,
-            self.suffix_array_sampling_rate,
-            self.lookup_table_depth,
-        )
+        FmIndex::new(texts, alphabet, self)
     }
 }
 
@@ -45,7 +45,7 @@ impl<I: IndexStorage, B: Block> Default for FmIndexConfig<I, B> {
     fn default() -> Self {
         Self {
             suffix_array_sampling_rate: 4,
-            lookup_table_depth: 13,
+            lookup_table_depth: 10,
             _index_storage_marker: PhantomData,
             _block_marker: PhantomData,
         }
