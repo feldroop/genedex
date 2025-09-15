@@ -1,6 +1,4 @@
-use genedex::{
-    FmIndex, FmIndexConfig, Hit, IndexStorage, alphabet, text_with_rank_support::Block64,
-};
+use genedex::{FmIndex, FmIndexConfig, Hit, IndexStorage, alphabet, block::Block64};
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -11,7 +9,7 @@ fn create_index<I: IndexStorage>() -> FmIndex<I> {
     FmIndexConfig::<I>::new()
         .lookup_table_depth(0)
         .suffix_array_sampling_rate(3)
-        .construct([text], alphabet::ascii_dna())
+        .construct_index([text], alphabet::ascii_dna())
 }
 
 static BASIC_QUERY: &[u8] = b"gg";
@@ -88,7 +86,7 @@ fn search_multitext() {
     let index = FmIndexConfig::<u32>::new()
         .lookup_table_depth(4)
         .suffix_array_sampling_rate(3)
-        .construct(texts, alphabet::ascii_dna());
+        .construct_index(texts, alphabet::ascii_dna());
 
     let expected_results_basic_query = HashSet::from_iter([
         Hit {
@@ -138,7 +136,7 @@ fn u8_alphabet() {
     let index = FmIndexConfig::<u32>::new()
         .lookup_table_depth(4)
         .suffix_array_sampling_rate(3)
-        .construct(texts, alphabet::u8_until(8));
+        .construct_index(texts, alphabet::u8_until(8));
 
     let expected_results = HashSet::from_iter([
         Hit {
@@ -275,7 +273,7 @@ fn proptest_fail() {
     let index_i32 = FmIndexConfig::<i32>::new()
         .lookup_table_depth(0)
         .suffix_array_sampling_rate(1)
-        .construct(&texts, alphabet::ascii_dna());
+        .construct_index(&texts, alphabet::ascii_dna());
 
     run_queries(
         &index_i32,
@@ -315,15 +313,15 @@ proptest! {
             let index_i32 = FmIndexConfig::<i32>::new()
                 .lookup_table_depth(lookup_table_depth)
                 .suffix_array_sampling_rate(suffix_array_sampling_rate)
-                .construct(&texts, alphabet::ascii_dna());
+                .construct_index(&texts, alphabet::ascii_dna());
             let index_u32 = FmIndexConfig::<u32>::new()
                 .lookup_table_depth(lookup_table_depth)
                 .suffix_array_sampling_rate(suffix_array_sampling_rate)
-                .construct(&texts, alphabet::ascii_dna_with_n());
+                .construct_index(&texts, alphabet::ascii_dna_with_n());
             let index_i64 = FmIndexConfig::<i64>::new()
                 .lookup_table_depth(lookup_table_depth)
                 .suffix_array_sampling_rate(suffix_array_sampling_rate)
-                .construct(&texts, alphabet::ascii_dna_iupac_as_dna_with_n());
+                .construct_index(&texts, alphabet::ascii_dna_iupac_as_dna_with_n());
 
             run_queries(&index_i32, &existing_queries,&random_queries, &random_queries_naive_hits);
             run_queries(&index_u32, &existing_queries,&random_queries, &random_queries_naive_hits);

@@ -3,7 +3,7 @@ use num_traits::NumCast;
 
 use std::{collections::HashMap, marker::PhantomData, ops::Range};
 
-use crate::{IndexStorage, text_with_rank_support::Block};
+use crate::{IndexStorage, block::Block};
 
 use super::FmIndex;
 
@@ -138,11 +138,11 @@ mod tests {
         let sampled_index = FmIndexConfig::<i32>::new()
             .lookup_table_depth(4)
             .suffix_array_sampling_rate(sampling_rate)
-            .construct(texts, alphabet.clone());
+            .construct_index(texts, alphabet.clone());
         let index = FmIndexConfig::<i32>::new()
             .lookup_table_depth(4)
             .suffix_array_sampling_rate(1)
-            .construct(texts, alphabet);
+            .construct_index(texts, alphabet);
 
         let recovered_array: Vec<_> = sampled_index
             .suffix_array

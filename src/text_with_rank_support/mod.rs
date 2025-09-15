@@ -1,18 +1,27 @@
-use std::slice;
+/// The FM-Index and text with rank support data structures can be used with two different block configurations.
+pub mod block;
+
+use block::{Block, Block64};
 
 use bitvec::prelude::*;
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 
-use crate::maybe_savefile::MaybeSavefile;
-
 // Interleaved means that the respective values for different symbols of the alphabet
 // for the same text position are next to each other.
 // Blocks must be interleaved for efficient queries.
 // (Super)block offsets are only interleaved for faster (parallel) construction.
+
+/// This data structure is central to the FM-Index of this library.
+///
+/// It can answer rank queries similar to the ones for bitvectors with rank support,
+/// but for a text with a given number of different symbols.
+///
+/// An example of how this data structure is used can be found
+/// [here](https://github.com/feldroop/genedex/blob/master/examples/text_with_rank_support.rs).
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug)]
-pub struct TextWithRankSupport<I, B = Block512> {
+pub struct TextWithRankSupport<I, B = Block64> {
     text_len: usize,
     alphabet_size: usize,
     interleaved_blocks: Vec<B>,
@@ -21,6 +30,10 @@ pub struct TextWithRankSupport<I, B = Block512> {
 }
 
 impl<I: PrimInt + Send + Sync, B: Block> TextWithRankSupport<I, B> {
+    /// Construct the data structure for the given text.
+    ///
+    /// All symbols are assumed to be smaller than `alphabet_size`. In the terminology of this library,
+    /// they are in dense representation. The running time of this operation is linear in the text length.
     pub fn construct(text: &[u8], alphabet_size: usize) -> Self {
         assert!(alphabet_size >= 2);
 
@@ -83,7 +96,9 @@ impl<I: PrimInt + Send + Sync, B: Block> TextWithRankSupport<I, B> {
 }
 
 impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
-    // number of occurrences of the symbol in text[0..idx]
+    /// Returns the number of occurrences of `symbol` in `text[0..idx]`.
+    ///
+    /// The running time is in O(1).
     pub fn rank(&self, symbol: u8, idx: usize) -> usize {
         let symbol_usize = symbol as usize;
         let alphabet_num_bits = ilog2_ceil(self.alphabet_size);
@@ -120,6 +135,9 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
         superblock_offset + block_offset + block_count
     }
 
+    /// Recoveres the symbol of the text at given index `idx`.
+    ///
+    /// The running time is in O(1).
     pub fn symbol_at(&self, idx: usize) -> u8 {
         let alphabet_num_bits = ilog2_ceil(self.alphabet_size);
         let blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
@@ -191,142 +209,10 @@ fn fill_superblock<I: PrimInt, B: Block>(
     }
 }
 
-// this distinction of block types only exists to be able to set repr(align(64)) for the 512 bit block
-pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync + MaybeSavefile + 'static {
-    const NUM_BITS: usize;
-    const NUM_BYTES: usize = Self::NUM_BITS / 8;
-    const NUM_U64: usize = Self::NUM_BITS / 64;
-
-    fn from_init_store(init_store: u64) -> Self;
-
-    fn zeroes() -> Self {
-        Self::from_init_store(0)
-    }
-
-    fn ones() -> Self {
-        Self::from_init_store(u64::MAX)
-    }
-
-    fn as_bitslice(&self) -> &BitSlice<u64>;
-    fn as_mut_bitslice(&mut self) -> &mut BitSlice<u64>;
-
-    fn as_raw_slice(&self) -> &[u64];
-    fn as_raw_mut_slice(&mut self) -> &mut [u64];
-
-    fn negate(&mut self) {
-        for store in self.as_raw_mut_slice() {
-            *store = !(*store);
-        }
-    }
-
-    fn set_to_self_and(&mut self, other: Self) {
-        for (store, other_store) in self.as_raw_mut_slice().iter_mut().zip(other.as_raw_slice()) {
-            *store &= other_store;
-        }
-    }
-
-    fn count_ones(&self) -> usize {
-        self.as_raw_slice()
-            .iter()
-            .map(|&s| s.count_ones() as usize)
-            .sum()
-    }
-
-    // for some reason, a manuel implementation seemed to have a tiny benefit in benchmarks
-    // might be a benchmarking error, but the flamgegraph showed genereated code with atomics,
-    // that might be a reason.
-    fn get_bit(&self, index: usize) -> u8;
-}
-
-#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[derive(Debug, Clone, Copy)]
-#[repr(align(64))]
-pub struct Block512 {
-    data: [u64; 8],
-}
-
-impl sealed::Sealed for Block512 {}
-
-impl MaybeSavefile for Block512 {}
-
-impl Block for Block512 {
-    const NUM_BITS: usize = 512;
-
-    fn from_init_store(init_store: u64) -> Self {
-        Self {
-            data: [init_store; 8],
-        }
-    }
-
-    fn as_bitslice(&self) -> &BitSlice<u64> {
-        self.data.view_bits()
-    }
-
-    fn as_mut_bitslice(&mut self) -> &mut BitSlice<u64> {
-        self.data.view_bits_mut()
-    }
-
-    fn as_raw_slice(&self) -> &[u64] {
-        &self.data
-    }
-
-    fn as_raw_mut_slice(&mut self) -> &mut [u64] {
-        &mut self.data
-    }
-
-    fn get_bit(&self, index: usize) -> u8 {
-        let store_index = index / 64;
-        let index_in_store = index % 64;
-        ((self.data[store_index] >> index_in_store) & 1) as u8
-    }
-}
-
-#[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[derive(Debug, Clone, Copy)]
-pub struct Block64 {
-    data: u64,
-}
-
-impl sealed::Sealed for Block64 {}
-
-impl MaybeSavefile for Block64 {}
-
-impl Block for Block64 {
-    const NUM_BITS: usize = 64;
-
-    fn from_init_store(init_store: u64) -> Self {
-        Self { data: init_store }
-    }
-
-    fn as_bitslice(&self) -> &BitSlice<u64> {
-        self.data.view_bits()
-    }
-
-    fn as_mut_bitslice(&mut self) -> &mut BitSlice<u64> {
-        self.data.view_bits_mut()
-    }
-
-    fn as_raw_slice(&self) -> &[u64] {
-        slice::from_ref(&self.data)
-    }
-
-    fn as_raw_mut_slice(&mut self) -> &mut [u64] {
-        slice::from_mut(&mut self.data)
-    }
-
-    fn get_bit(&self, index: usize) -> u8 {
-        ((self.data >> index) & 1) as u8
-    }
-}
-
 fn ilog2_ceil(value: usize) -> usize {
     if value.is_power_of_two() {
         value.ilog2() as usize
     } else {
         (value.ilog2() + 1) as usize
     }
-}
-
-mod sealed {
-    pub trait Sealed {}
 }

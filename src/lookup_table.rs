@@ -1,6 +1,6 @@
 use num_traits::NumCast;
 
-use crate::{FmIndex, IndexStorage, text_with_rank_support::Block};
+use crate::{FmIndex, IndexStorage, text_with_rank_support::block::Block};
 
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug)]
@@ -65,7 +65,7 @@ impl<I: IndexStorage> LookupTable<I> {
         } else {
             data[0] = (
                 <I as NumCast>::from(0).unwrap(),
-                <I as NumCast>::from(index.text_with_rank_support.text_len()).unwrap(),
+                <I as NumCast>::from(index.total_text_len()).unwrap(),
             );
         }
 

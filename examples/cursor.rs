@@ -4,15 +4,14 @@ fn main() {
     // This eample showcases the flexible cursor API for the FM-Index of this library.
 
     let dna_n_alphabet = alphabet::ascii_dna_with_n();
-    let texts = [b"ACGT".as_slice(), b"acgtn", b"GTGTGT"];
+    let texts = [b"AaACGT".as_slice(), b"AacGtn", b"GTGTGT"];
 
-    let index = FmIndexConfig::<i32>::new().construct(texts, dna_n_alphabet);
+    let index = FmIndexConfig::<i32>::new().construct_index(texts, dna_n_alphabet);
 
     let query = b"GT";
 
-    // We obtain a cursor that points to the index. The cursor maintains an interval that contains positions
-    // of all occurrences of a currently searched query. This symbols can iteratively be added to the front of
-    // this query.
+    // We obtain a cursor that points to the index. The cursor maintains a currently searched query.
+    // Symbols can iteratively be added to the front of this query.
     let mut cursor = index.cursor_for_query(query);
 
     // There are too many occurrences for out taste.

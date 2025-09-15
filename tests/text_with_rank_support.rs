@@ -3,7 +3,7 @@ use proptest::prelude::*;
 
 use genedex::{
     TextWithRankSupport,
-    text_with_rank_support::{Block, Block64, Block512},
+    block::{Block, Block64, Block512},
 };
 
 type OccurrenceColumn<T> = Vec<T>;

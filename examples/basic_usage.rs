@@ -4,9 +4,9 @@ fn main() {
     // This example shows how to use the FM-Index in the most basic way.
 
     let dna_n_alphabet = alphabet::ascii_dna_with_n();
-    let texts = [b"ACGT".as_slice(), b"acgtn"];
+    let texts = [b"aACGT", b"acGtn"];
 
-    let index = FmIndexConfig::<i32>::new().construct(texts, dna_n_alphabet);
+    let index = FmIndexConfig::<i32>::new().construct_index(texts, dna_n_alphabet);
 
     let query = b"GT";
     assert_eq!(index.count(query), 2);

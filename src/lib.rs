@@ -1,8 +1,45 @@
+/*! This library contains an implementation of the FM-Index data structure ([original paper]).
+*
+* It is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
+* by Simon Gene Gottlieb (publication pending). This encoding attemps to provide a good trade-off between
+* memory usage and running time of queries.
+*
+* The library supports creating an FM-Index for a set of texts over an [alphabet]. The index construction
+* is based on the [`libsais-rs`] crate and parallelized.
+*
+* The following is a basic example of how to use this library:
+*
+* ```
+* use genedex::{FmIndexConfig, alphabet};
+*
+* let dna_n_alphabet = alphabet::ascii_dna_with_n();
+* let texts = [b"aACGT", b"acGtn"];
+*
+* let index = FmIndexConfig::<i32>::new().construct_index(texts, dna_n_alphabet);
+*
+* let query = b"GT";
+* assert_eq!(index.count(query), 2);
+*
+* for hit in index.locate(query) {
+*     println!(
+*         "Found query in text {} at position {}.",
+*         hit.text_id, hit.position
+*     );
+* }
+* ```
+*
+* More information about the flexible [cursor](Cursor) API, build [configuration](FmIndexConfig) and [variants](block) of the FM-Index can
+* be found in the module-level and struct-level documentation.
+*
+* [original paper]: https://doi.org/10.1109/SFCS.2000.892127
+* [`libsais-rs`]: (https://github.com/feldroop/libsais-rs)
+*/
+
 /// Contains functions to create various commonly used alphabets.
 pub mod alphabet;
-pub mod config;
-pub mod cursor;
-pub mod text_with_rank_support;
+mod config;
+mod cursor;
+mod text_with_rank_support;
 
 mod construction;
 mod lookup_table;
@@ -21,13 +58,19 @@ pub use config::FmIndexConfig;
 pub use cursor::Cursor;
 #[doc(inline)]
 pub use text_with_rank_support::TextWithRankSupport;
+#[doc(inline)]
+pub use text_with_rank_support::block;
+
+use block::{Block, Block64};
 
 use construction::DataStructures;
 use lookup_table::LookupTables;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
-use text_with_rank_support::{Block, Block64};
 
+/// The FM-Index data structure.
+///
+/// See [crate-level documentation](self) for details.
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 pub struct FmIndex<I, B = Block64> {
     alphabet: Alphabet,
@@ -39,8 +82,6 @@ pub struct FmIndex<I, B = Block64> {
 }
 
 impl<I: IndexStorage, B: Block> FmIndex<I, B> {
-    // text chars must be smaller than alphabet size and greater than 0
-    // other operations use rayons configured number of threads
     fn new<T: AsRef<[u8]>>(
         texts: impl IntoIterator<Item = T>,
         alphabet: Alphabet,
@@ -53,7 +94,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
             text_with_rank_support,
         } = construction::create_data_structures::<I, B, T>(texts, config, &alphabet);
 
-        let num_searchable_symbols = alphabet.num_searchable_symbols();
+        let num_searchable_symbols = alphabet.num_searchable_dense_symbols();
 
         let mut index = FmIndex {
             alphabet,
@@ -73,10 +114,19 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
         index
     }
 
+    /// Returns the number of occurrences of `query` in the set of indexed texts.
+    ///
+    /// Running time is in O(`query.len() - d`), where d is the depth of the lookup table of the index.
     pub fn count(&self, query: &[u8]) -> usize {
         self.cursor_for_query(query).count()
     }
 
+    /// Returns the number of occurrences of `query` in the set of indexed texts.
+    ///
+    /// The initial running time is the same as for [`count`](Self::count).
+    /// For each hit pulled from the iterator, a sampled suffix array lookup is performed.
+    /// This operation needs `s / 2` steps on average, where `s` is the suffix array
+    /// sampling rate of the index.
     pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = Hit> {
         let cursor = self.cursor_for_query(query);
 
@@ -95,16 +145,22 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
             })
     }
 
+    /// Returns a cursor to the index with the empty query currently searched.
+    ///
+    /// See [`Cursor`] for details. Running time is in `O(1)`.
     pub fn cursor_empty<'a>(&'a self) -> Cursor<'a, I, B> {
         Cursor {
             index: self,
             interval: HalfOpenInterval {
                 start: 0,
-                end: self.text_with_rank_support.text_len(),
+                end: self.total_text_len(),
             },
         }
     }
 
+    /// Returns a cursor to the index with `query` currently searched.
+    ///
+    /// See [`Cursor`] for details. Running time is the same as for [`count`](Self::count).
     pub fn cursor_for_query<'a>(&'a self, query: &[u8]) -> Cursor<'a, I, B> {
         let query_iter = query
             .iter()
@@ -131,7 +187,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
         for symbol in query.into_iter().skip(lookup_depth) {
             cursor.extend_front_without_alphabet_translation(symbol);
 
-            if cursor.is_empty() {
+            if cursor.count() == 0 {
                 break;
             }
         }
@@ -141,6 +197,19 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
 
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
         self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
+    }
+
+    pub fn alphabet(&self) -> &Alphabet {
+        &self.alphabet
+    }
+
+    pub fn num_texts(&self) -> usize {
+        self.text_ids.sentinel_indices.len()
+    }
+
+    /// The length of all the texts that this index is built on. The value includes a sentinel symbol for each text.
+    pub fn total_text_len(&self) -> usize {
+        self.text_with_rank_support.text_len()
     }
 }
 
@@ -175,6 +244,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     }
 }
 
+/// Represents an occurrence of a searched query in the set of indexed texts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hit {
     pub text_id: usize,
@@ -187,11 +257,22 @@ pub(crate) struct HalfOpenInterval {
     pub end: usize,
 }
 
+/// Types that can be used to store indices inside the FM-Index.
+///
+/// The maximum value of the type is an upper bound for the sum of lengths of indexed texts. Types with
+/// larger maximum values allow indexing larger texts.
+///
+/// On the other hand, larger types lead to higher memory usage, especially during index
+/// construction. Currently, there does not exist a suffix array construction backend for
+/// `u32`, so it uses as much memory as `i64` during construction.
+///
+/// For example, to index the 3.3 GB large human genome, `u32` would be the best solution.
 pub trait IndexStorage:
     PrimInt + Pod + maybe_savefile::MaybeSavefile + sealed::Sealed + Send + Sync + 'static
 {
     type LibsaisOutput: OutputElement;
 
+    #[doc(hidden)]
     fn sample_suffix_array(
         suffix_array_bytes: Vec<u8>,
         sampling_rate: usize,

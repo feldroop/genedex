@@ -25,3 +25,4 @@ Coming soon!
 - FMD-Index
 - optimizations for highly repetitive texts such as run length encoding
 - searches with errors and "degenerate" chars in IUPAC fasta definition (using search schemes)
+- word-based FM-Indices

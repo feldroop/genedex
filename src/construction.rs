@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::alphabet::Alphabet;
 use crate::sampled_suffix_array::SampledSuffixArray;
 use crate::text_id_search_tree::TexdIdSearchTree;
-use crate::text_with_rank_support::Block;
+use crate::text_with_rank_support::block::Block;
 use crate::{FmIndexConfig, IndexStorage, TextWithRankSupport};
 
 pub(crate) struct DataStructures<I, B> {
@@ -28,7 +28,7 @@ pub(crate) fn create_data_structures<I: IndexStorage, B: Block, T: AsRef<[u8]>>(
 
     let text_ids = TexdIdSearchTree::new_from_sentinel_indices(sentinel_indices);
 
-    let count = frequency_table_to_count(&frequency_table, alphabet.size());
+    let count = frequency_table_to_count(&frequency_table, alphabet.num_dense_symbols());
 
     // allocate the buffer in bytes, because maybe we want to muck around with integer types later (compress i64 into u32)
     let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<I::LibsaisOutput>()];
@@ -59,7 +59,7 @@ pub(crate) fn create_data_structures<I: IndexStorage, B: Block, T: AsRef<[u8]>>(
         text_border_lookup,
     );
 
-    let text_with_rank_support = TextWithRankSupport::construct(&bwt, alphabet.size());
+    let text_with_rank_support = TextWithRankSupport::construct(&bwt, alphabet.num_dense_symbols());
 
     DataStructures {
         count,

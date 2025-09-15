@@ -6,8 +6,8 @@ fn main() {
     // symbol is always implicitly included.
 
     let digits = Alphabet::from_io_symbols(b"0123456789", 0);
-    assert_eq!(digits.size(), 11);
-    assert_eq!(digits.num_searchable_symbols(), 10);
+    assert_eq!(digits.num_dense_symbols(), 11);
+    assert_eq!(digits.num_searchable_dense_symbols(), 10);
 
     let roman = Alphabet::from_ambiguous_io_symbols(
         [
@@ -17,6 +17,6 @@ fn main() {
         ],
         0,
     );
-    assert_eq!(roman.size(), 27);
-    assert_eq!(roman.num_searchable_symbols(), 26);
+    assert_eq!(roman.num_dense_symbols(), 27);
+    assert_eq!(roman.num_searchable_dense_symbols(), 26);
 }
