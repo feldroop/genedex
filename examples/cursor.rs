@@ -14,7 +14,7 @@ fn main() {
     // Symbols can iteratively be added to the front of this query.
     let mut cursor = index.cursor_for_query(query);
 
-    // There are too many occurrences for out taste.
+    // There are too many occurrences for our taste.
     assert_eq!(cursor.count(), 5);
 
     // So we extend the currently searched query by a symbol.
