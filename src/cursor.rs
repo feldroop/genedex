@@ -8,8 +8,6 @@ pub struct Cursor<'a, I, B> {
 impl<'a, I: IndexStorage, B: Block> Cursor<'a, I, B> {
     pub fn extend_query_front(&mut self, symbol: u8) {
         let symbol = self.index.alphabet.io_to_dense_representation(symbol);
-        debug_assert!(symbol != 255 && symbol != 0);
-
         self.extend_front_without_alphabet_translation(symbol);
     }
 
@@ -27,7 +25,7 @@ impl<'a, I: IndexStorage, B: Block> Cursor<'a, I, B> {
     }
 
     // returns half open interval [start, end)
-    pub fn interval(&self) -> HalfOpenInterval {
+    pub(crate) fn interval(&self) -> HalfOpenInterval {
         self.interval
     }
 

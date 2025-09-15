@@ -182,7 +182,7 @@ pub struct Hit {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HalfOpenInterval {
+pub(crate) struct HalfOpenInterval {
     pub start: usize,
     pub end: usize,
 }

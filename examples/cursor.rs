@@ -10,15 +10,15 @@ fn main() {
 
     let query = b"GT";
 
-    // We obtain a cursor, that points to the index. The cursor maintains an interval that contains positions
+    // We obtain a cursor that points to the index. The cursor maintains an interval that contains positions
     // of all occurrences of a currently searched query. This symbols can iteratively be added to the front of
     // this query.
     let mut cursor = index.cursor_for_query(query);
 
-    // There are too many occurrences for out taste!
+    // There are too many occurrences for out taste.
     assert_eq!(cursor.count(), 5);
 
-    // So we extend the currently searched query by a symbol
+    // So we extend the currently searched query by a symbol.
     cursor.extend_query_front(b'C');
 
     // That's better!
