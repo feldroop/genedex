@@ -1,10 +1,10 @@
-use crate::{FmIndex, Hit, IndexStorage, Interval, text_with_rank_support::Block};
+use crate::{FmIndex, HalfOpenInterval, Hit, IndexStorage, text_with_rank_support::Block};
 use std::marker::PhantomData;
 
 #[derive(Clone)]
 pub struct Cursor<'a, C, I, B> {
     index: &'a FmIndex<I, B>,
-    interval: Interval,
+    interval: HalfOpenInterval,
     _marker: PhantomData<C>,
 }
 
@@ -31,13 +31,13 @@ impl<'a, C: CursorState, I: IndexStorage, B: Block> Cursor<'a, C, I, B> {
 
         Cursor {
             index: self.index,
-            interval: Interval { start, end },
+            interval: HalfOpenInterval { start, end },
             _marker: PhantomData,
         }
     }
 
     // returns half open interval [start, end)
-    pub fn interval(&self) -> Interval {
+    pub fn interval(&self) -> HalfOpenInterval {
         self.interval
     }
 
@@ -58,7 +58,7 @@ impl<'a, I: IndexStorage, B: Block> Cursor<'a, Init, I, B> {
     pub(crate) fn new(index: &'a FmIndex<I, B>, text_len: usize) -> Self {
         Self {
             index,
-            interval: Interval {
+            interval: HalfOpenInterval {
                 start: 0,
                 end: text_len,
             },
@@ -87,7 +87,7 @@ impl<'a, I: IndexStorage, B: Block> Cursor<'a, Init, I, B> {
 
         let mut cursor = Cursor {
             index: self.index,
-            interval: Interval { start, end },
+            interval: HalfOpenInterval { start, end },
             _marker: PhantomData,
         };
 

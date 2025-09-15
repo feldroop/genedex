@@ -25,9 +25,6 @@ jobs:
       run: cargo clippy --verbose
     - name: Documentation
       run: cargo doc
-    # - name: Examples
-    #   run: |
-    #     cargo run --example fully_configured_generalized_suffix_array
-    #     cargo run --example large_alphabet_suffix_array
-    #     cargo run --example the_lcp_ladder
-    #     cargo run --example to_the_bwt_and_back
+    - name: Examples
+      run: |
+        cargo run --example custom_alphabet

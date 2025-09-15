@@ -1,3 +1,4 @@
+/// Contains functions to create various commonly used alphabets.
 pub mod alphabet;
 pub mod config;
 pub mod cursor;
@@ -45,9 +46,9 @@ pub struct Hit {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Interval {
-    start: usize,
-    end: usize,
+pub struct HalfOpenInterval {
+    pub start: usize,
+    pub end: usize,
 }
 
 impl<I: IndexStorage, B: Block> FmIndex<I, B> {
@@ -96,7 +97,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
         self.locate_interval(cursor.interval())
     }
 
-    fn locate_interval(&self, interval: Interval) -> impl Iterator<Item = Hit> {
+    fn locate_interval(&self, interval: HalfOpenInterval) -> impl Iterator<Item = Hit> {
         self.suffix_array
             .recover_range(interval.start..interval.end, self)
             .map(|idx| {

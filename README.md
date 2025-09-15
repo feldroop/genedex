@@ -10,6 +10,9 @@ Coming soon!
     - BWT view optimization
     - suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
     - maybe compress compress text and/or bwt at some point during construction 
+- more flexible alphabet API
+    - allow alphabet with sentinel inclded in io representation
+    - allow alphabet without sentinel (only usable for single text indexing)
 - optimized version for single text without sentinel
 - optimized construction directly from (fasta) file reader
 - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome)
