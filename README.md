@@ -11,7 +11,7 @@ by Simon Gene Gottlieb (publication pending). This encoding attemps to provide a
 memory usage and running time of queries. Further benefits of `genedex` include:
 
 - Fast, parallel index construction by leveraging the [`libsais-rs`] crate
-- Support for indexing a set of texts, like chromosomes of a genomes
+- Support for indexing a set of texts, like chromosomes of a genome
 - Flexible cursor API
 - Thoroughly tested using [`proptest`]
 
