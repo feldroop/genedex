@@ -17,12 +17,11 @@ impl<I: IndexStorage> LookupTables<I> {
         }
     }
 
-    pub(crate) fn lookup(
-        &self,
-        query: impl IntoIterator<Item = u8>,
-        depth: usize,
-    ) -> (usize, usize) {
-        self.tables[depth].lookup(query, self.num_symbols)
+    pub(crate) fn lookup<Q>(&self, query_iter: &mut Q, depth: usize) -> (usize, usize)
+    where
+        Q: Iterator<Item = u8>,
+    {
+        self.tables[depth].lookup(query_iter, self.num_symbols)
     }
 
     pub(crate) fn max_depth(&self) -> usize {
@@ -73,11 +72,14 @@ impl<I: IndexStorage> LookupTable<I> {
     }
 
     // direction should already be resolved by the iterator
-    fn lookup(&self, query: impl IntoIterator<Item = u8>, num_symbols: usize) -> (usize, usize) {
+    fn lookup<Q>(&self, query_iter: &mut Q, num_symbols: usize) -> (usize, usize)
+    where
+        Q: Iterator<Item = u8>,
+    {
         let mut idx = 0;
         let mut exponent = self.depth.saturating_sub(1);
 
-        for symbol in query.into_iter().take(self.depth) {
+        for symbol in query_iter.take(self.depth) {
             // subtract one, because the sentinel is not stored in the table
             let symbol = symbol - 1;
             idx += symbol as usize * num_symbols.pow(exponent as u32);

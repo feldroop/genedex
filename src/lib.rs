@@ -177,21 +177,24 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
         self.cursor_for_iter_without_alphabet_translation(query_iter)
     }
 
-    fn cursor_for_iter_without_alphabet_translation<'a>(
+    fn cursor_for_iter_without_alphabet_translation<'a, Q>(
         &'a self,
-        query: impl IntoIterator<Item = u8> + ExactSizeIterator + Clone,
-    ) -> Cursor<'a, I, B> {
-        let lookup_depth = std::cmp::min(query.len(), self.lookup_tables.max_depth());
-        let (start, end) = self
-            .lookup_tables
-            .lookup(query.clone().into_iter(), lookup_depth);
+        query: impl IntoIterator<IntoIter = Q>,
+    ) -> Cursor<'a, I, B>
+    where
+        Q: ExactSizeIterator<Item = u8>,
+    {
+        let mut query_iter = query.into_iter();
+
+        let lookup_depth = std::cmp::min(query_iter.len(), self.lookup_tables.max_depth());
+        let (start, end) = self.lookup_tables.lookup(&mut query_iter, lookup_depth);
 
         let mut cursor = Cursor {
             index: self,
             interval: HalfOpenInterval { start, end },
         };
 
-        for symbol in query.into_iter().skip(lookup_depth) {
+        for symbol in query_iter {
             cursor.extend_front_without_alphabet_translation(symbol);
 
             if cursor.count() == 0 {
