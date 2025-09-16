@@ -3,7 +3,6 @@ pub mod block;
 
 use block::{Block, Block64};
 
-use bitvec::prelude::*;
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 
@@ -99,7 +98,7 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
     /// Returns the number of occurrences of `symbol` in `text[0..idx]`.
     ///
     /// The running time is in O(1).
-    pub fn rank(&self, symbol: u8, idx: usize) -> usize {
+    pub fn rank(&self, mut symbol: u8, idx: usize) -> usize {
         let symbol_usize = symbol as usize;
         let alphabet_num_bits = ilog2_ceil(self.alphabet_size);
 
@@ -117,11 +116,15 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
         let interleaved_blocks =
             &self.interleaved_blocks[interleaved_blocks_start..interleaved_blocks_end];
 
-        let mut accumulator_block = B::ones();
-        let symbol_bits = symbol.view_bits::<Lsb0>();
+        let mut accumulator_block = interleaved_blocks[0];
+        if symbol & 1 == 0 {
+            accumulator_block.negate();
+        }
 
-        for (mut block, symbol_bit) in interleaved_blocks.iter().copied().zip(symbol_bits) {
-            if !symbol_bit {
+        for mut block in interleaved_blocks[1..].iter().copied() {
+            symbol >>= 1;
+
+            if symbol & 1 == 0 {
                 block.negate();
             }
 
@@ -129,7 +132,7 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
         }
 
         let index_in_block = idx % B::NUM_BITS;
-        accumulator_block.as_mut_bitslice()[index_in_block..].fill(false);
+        accumulator_block.zeroize_bits_starting_from(index_in_block);
         let block_count = accumulator_block.count_ones();
 
         superblock_offset + block_offset + block_count
@@ -183,7 +186,7 @@ fn fill_superblock<I: PrimInt, B: Block>(
     for ((text_block, block_offsets), blocks) in block_package_iter {
         block_offsets.copy_from_slice(&block_offsets_sum);
 
-        for (index_in_block, symbol) in text_block.iter().copied().enumerate() {
+        for (index_in_block, mut symbol) in text_block.iter().copied().enumerate() {
             let symbol_usize = <usize as NumCast>::from(symbol).unwrap();
 
             let superblock_count = &mut interleaved_superblock_offsets[symbol_usize];
@@ -191,10 +194,9 @@ fn fill_superblock<I: PrimInt, B: Block>(
 
             block_offsets_sum[symbol_usize] += 1;
 
-            let symbol_bits = symbol.view_bits::<Lsb0>();
-
-            for (block, bit) in blocks.iter_mut().zip(symbol_bits) {
-                block.as_mut_bitslice().set(index_in_block, *bit);
+            for block in blocks.iter_mut() {
+                block.set_bit_assuming_zero(index_in_block, symbol & 1);
+                symbol >>= 1;
             }
         }
     }

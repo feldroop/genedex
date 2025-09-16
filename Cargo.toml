@@ -21,7 +21,6 @@ edition = "2024"
 [dependencies]
 num-traits = "0.2.19"
 libsais = "0.2.0"
-bitvec = "1"
 bytemuck = "1.23.2"
 memchr = "2.7"
 

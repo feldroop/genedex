@@ -1,5 +1,7 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
+- remove unnecesary checks using `unsafe`
+- optimized block layout
 - improved build memory usage: 
     - configurable, slower low memory mode
     - u32 saca (maybe sais-drum)
