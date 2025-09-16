@@ -10,7 +10,7 @@ The implementation of this library is based on an encoding for the text with ran
 by Simon Gene Gottlieb (publication pending), who also was a great help while developing this library. This encoding attemps to provide a good trade-off between
 memory usage and running time of queries. Further benefits of `genedex` include:
 
-- Fast, parallel index construction by leveraging the [`libsais-rs`] crate.
+- Fast, parallel and memory efficient index construction by leveraging [`libsais-rs`] and [`rayon`].
 - Support for indexing a set of texts, like chromosomes of a genome.
 - A flexible cursor API.
 - Fast reading and writing the FM-Index from/to files, using [`savefile`].
@@ -47,6 +47,7 @@ Work in progress. Can be found [here](https://github.com/feldroop/rust-fmindex-b
 
 [FM-Index]: https://doi.org/10.1109/SFCS.2000.892127
 [`libsais-rs`]: https://github.com/feldroop/libsais-rs
+[`rayon`]: https://github.com/rayon-rs/rayon
 [`savefile`]: https://github.com/avl/savefile
 [`proptest`]: https://github.com/proptest-rs/proptest
 [roadmap]: ./ROADMAP.md
