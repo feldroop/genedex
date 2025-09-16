@@ -15,7 +15,7 @@ memory usage and running time of queries. Further benefits of `genedex` include:
 - Flexible cursor API
 - Thoroughly tested using [`proptest`]
 
-⚠️ **Warning:** this library is in an early stage. The API is still subject to changes. Any kind of feedback and suggestions via the issue tracker is highly appreciated! ⚠️
+⚠️ **Warning:** this library is in an early stage. The API is still subject to changes. Currently, only a basic FM-Index is impkemented. For upcoming features, take a look at the [roadmap](./ROADMAP.md). Any kind of feedback and suggestions via the issue tracker is highly appreciated! ⚠️
 
 ## Usage
 
