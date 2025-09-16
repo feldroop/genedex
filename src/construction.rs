@@ -1,13 +1,147 @@
+use bytemuck::Pod;
 use libsais::{OutputElement, ThreadCount};
-use num_traits::NumCast;
+use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
 use std::collections::HashMap;
 
 use crate::alphabet::Alphabet;
+use crate::config::PerformancePriority;
 use crate::sampled_suffix_array::SampledSuffixArray;
 use crate::text_id_search_tree::TexdIdSearchTree;
 use crate::text_with_rank_support::block::Block;
-use crate::{FmIndexConfig, IndexStorage, TextWithRankSupport};
+use crate::{FmIndexConfig, TextWithRankSupport, maybe_savefile, sealed};
+
+/// Types that can be used to store indices inside the FM-Index.
+///
+/// The maximum value of the type is an upper bound for the sum of lengths of indexed texts. Types with
+/// larger maximum values allow indexing larger texts.
+///
+/// On the other hand, larger types lead to higher memory usage, especially during index
+/// construction. Currently, there does not exist a suffix array construction backend for
+/// `u32`, so it uses as much memory as `i64` during construction.
+///
+/// For example, to index the 3.3 GB large human genome, `u32` would be the best solution.
+pub trait IndexStorage:
+    PrimInt + Pod + maybe_savefile::MaybeSavefile + sealed::Sealed + Send + Sync + 'static
+{
+    type LibsaisOutput: OutputElement;
+
+    #[doc(hidden)]
+    fn construct_libsais_suffix_array(
+        text: &[u8],
+        frequency_table: &mut [Self::LibsaisOutput],
+    ) -> Vec<u8> {
+        // allocate the buffer in bytes, because maybe we want to muck around with integer types later (compress i64 into u32)
+        let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<Self::LibsaisOutput>()];
+        let suffix_array_buffer: &mut [Self::LibsaisOutput] =
+            bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+
+        let mut construction = libsais::SuffixArrayConstruction::for_text(&text)
+            .in_borrowed_buffer(suffix_array_buffer)
+            .multi_threaded(ThreadCount::fixed(
+                rayon::current_num_threads()
+                    .try_into()
+                    .expect("Number of threads should fit into u16"),
+            ));
+
+        unsafe {
+            construction = construction.with_frequency_table(frequency_table);
+        }
+
+        construction
+            .run()
+            .expect("libsais suffix array construction");
+
+        suffix_array_bytes
+    }
+
+    #[doc(hidden)]
+    fn construct_sampled_suffix_array_and_bwt<B: Block>(
+        text: &[u8],
+        frequency_table: &mut [Self::LibsaisOutput],
+        config: FmIndexConfig<Self, B>,
+    ) -> (SampledSuffixArray<Self>, Vec<u8>) {
+        let suffix_array_bytes = Self::construct_libsais_suffix_array(text, frequency_table);
+        let suffix_array_buffer: &[Self::LibsaisOutput] = bytemuck::cast_slice(&suffix_array_bytes);
+
+        let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
+
+        let sampled_suffix_array = Self::sample_suffix_array_maybe_u32_compressed(
+            suffix_array_bytes,
+            config.suffix_array_sampling_rate,
+            text_border_lookup,
+        );
+
+        (sampled_suffix_array, bwt)
+    }
+
+    #[doc(hidden)]
+    fn sample_suffix_array_maybe_u32_compressed(
+        suffix_array_bytes: Vec<u8>,
+        sampling_rate: usize,
+        text_border_lookup: std::collections::HashMap<usize, Self>,
+    ) -> SampledSuffixArray<Self> {
+        SampledSuffixArray::new_uncompressed(suffix_array_bytes, sampling_rate, text_border_lookup)
+    }
+}
+
+impl sealed::Sealed for i32 {}
+
+impl IndexStorage for i32 {
+    type LibsaisOutput = i32;
+}
+
+impl sealed::Sealed for u32 {}
+
+impl IndexStorage for u32 {
+    type LibsaisOutput = i64;
+
+    fn construct_sampled_suffix_array_and_bwt<B: Block>(
+        text: &[u8],
+        frequency_table: &mut [Self::LibsaisOutput],
+        config: FmIndexConfig<Self, B>,
+    ) -> (SampledSuffixArray<Self>, Vec<u8>) {
+        // here is the place to inject the slower SACA for u32 in the future
+        match config.performance_priority {
+            PerformancePriority::HighSpeed
+            | PerformancePriority::Balanced
+            | PerformancePriority::LowMemory => {
+                let suffix_array_bytes =
+                    Self::construct_libsais_suffix_array(text, frequency_table);
+                let suffix_array_buffer: &[Self::LibsaisOutput] =
+                    bytemuck::cast_slice(&suffix_array_bytes);
+
+                let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
+
+                let sampled_suffix_array = Self::sample_suffix_array_maybe_u32_compressed(
+                    suffix_array_bytes,
+                    config.suffix_array_sampling_rate,
+                    text_border_lookup,
+                );
+
+                (sampled_suffix_array, bwt)
+            }
+        }
+    }
+
+    fn sample_suffix_array_maybe_u32_compressed(
+        suffix_array_bytes: Vec<u8>,
+        sampling_rate: usize,
+        text_border_lookup: std::collections::HashMap<usize, Self>,
+    ) -> SampledSuffixArray<Self> {
+        SampledSuffixArray::new_u32_compressed(
+            suffix_array_bytes,
+            sampling_rate,
+            text_border_lookup,
+        )
+    }
+}
+
+impl sealed::Sealed for i64 {}
+
+impl IndexStorage for i64 {
+    type LibsaisOutput = i64;
+}
 
 pub(crate) struct DataStructures<I, B> {
     pub(crate) count: Vec<usize>,
@@ -30,34 +164,8 @@ pub(crate) fn create_data_structures<I: IndexStorage, B: Block, T: AsRef<[u8]>>(
 
     let count = frequency_table_to_count(&frequency_table, alphabet.num_dense_symbols());
 
-    // allocate the buffer in bytes, because maybe we want to muck around with integer types later (compress i64 into u32)
-    let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<I::LibsaisOutput>()];
-    let suffix_array_buffer: &mut [I::LibsaisOutput] =
-        bytemuck::cast_slice_mut(&mut suffix_array_bytes);
-
-    let mut construction = libsais::SuffixArrayConstruction::for_text(&text)
-        .in_borrowed_buffer(suffix_array_buffer)
-        .multi_threaded(ThreadCount::fixed(
-            rayon::current_num_threads()
-                .try_into()
-                .expect("Number of threads should fit into u16"),
-        ));
-
-    unsafe {
-        construction = construction.with_frequency_table(&mut frequency_table);
-    }
-
-    construction
-        .run()
-        .expect("libsais suffix array construction");
-
-    let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
-
-    let sampled_suffix_array = I::sample_suffix_array(
-        suffix_array_bytes,
-        config.suffix_array_sampling_rate,
-        text_border_lookup,
-    );
+    let (sampled_suffix_array, bwt) =
+        I::construct_sampled_suffix_array_and_bwt(&text, &mut frequency_table, config);
 
     let text_with_rank_support = TextWithRankSupport::construct(&bwt, alphabet.num_dense_symbols());
 

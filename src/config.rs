@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 pub struct FmIndexConfig<I, B = Block64> {
     pub(crate) suffix_array_sampling_rate: usize,
     pub(crate) lookup_table_depth: usize,
+    pub(crate) performance_priority: PerformancePriority,
     _index_storage_marker: PhantomData<I>,
     _block_marker: PhantomData<B>,
 }
@@ -45,6 +46,17 @@ impl<I: IndexStorage, B: Block> FmIndexConfig<I, B> {
         }
     }
 
+    /// See [`PerformancePriority`] for details.
+    pub fn construction_performance_priority(
+        self,
+        performance_priority: PerformancePriority,
+    ) -> Self {
+        Self {
+            performance_priority,
+            ..self
+        }
+    }
+
     /// Construct the FM-Index.
     ///
     /// The number of threads for the build procedure is controlled by [`rayon`].
@@ -62,10 +74,22 @@ impl<I: IndexStorage, B: Block> Default for FmIndexConfig<I, B> {
         Self {
             suffix_array_sampling_rate: 4,
             lookup_table_depth: 8,
+            performance_priority: PerformancePriority::Balanced,
             _index_storage_marker: PhantomData,
             _block_marker: PhantomData,
         }
     }
+}
+
+/// This enum can be supplied to the [`FmIndexConfig`] to select different sub-algorithms during the
+/// construction of the FM-Index.
+///
+/// Currently, there is no difference ebetween th modes.
+#[derive(Debug, Clone, Copy)]
+pub enum PerformancePriority {
+    HighSpeed,
+    Balanced,
+    LowMemory,
 }
 
 #[cfg(test)]

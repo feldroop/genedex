@@ -1,16 +1,14 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
 - make Block512 default again? (depends on benchmark results)
-- improved build memory usage: 
-    - configurable, slower low memory mode
-    - u32 saca (maybe sais-drum)
-    - BWT view optimization
-    - suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
+- interleave superblocks and blocks
+- improved build memory usage:
+    - u32 saca (sais-drum)
+    - maybe BWT view optimization
     - maybe compress compress text and/or bwt at some point during construction 
 - more flexible alphabet API
     - allow alphabet with sentinel inclded in io representation
     - allow alphabet without sentinel (only usable for single text indexing)
-- faster lookup table index computation
 - optimized version for single text without sentinel
 - optimized construction directly from (fasta) file reader
 - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome)
@@ -18,6 +16,7 @@
 - gate rayon/OpenMP usage behind feature flag
 - bidirectional FM-Index
 - paired blocks for improved memory usage when using larger alphabets
+- suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
 - optional functionality for text recovery
 - text sampled suffix array (optionally with text ids and other annotations),
 - FMD-Index

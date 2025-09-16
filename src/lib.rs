@@ -53,14 +53,16 @@ mod lookup_table;
 mod sampled_suffix_array;
 mod text_id_search_tree;
 
-use bytemuck::Pod;
-use libsais::OutputElement;
-use num_traits::{NumCast, PrimInt};
+use num_traits::NumCast;
 
 #[doc(inline)]
 pub use alphabet::Alphabet;
 #[doc(inline)]
 pub use config::FmIndexConfig;
+#[doc(inline)]
+pub use config::PerformancePriority;
+#[doc(inline)]
+pub use construction::IndexStorage;
 #[doc(inline)]
 pub use cursor::Cursor;
 #[doc(inline)]
@@ -277,75 +279,6 @@ pub struct Hit {
 pub(crate) struct HalfOpenInterval {
     pub start: usize,
     pub end: usize,
-}
-
-/// Types that can be used to store indices inside the FM-Index.
-///
-/// The maximum value of the type is an upper bound for the sum of lengths of indexed texts. Types with
-/// larger maximum values allow indexing larger texts.
-///
-/// On the other hand, larger types lead to higher memory usage, especially during index
-/// construction. Currently, there does not exist a suffix array construction backend for
-/// `u32`, so it uses as much memory as `i64` during construction.
-///
-/// For example, to index the 3.3 GB large human genome, `u32` would be the best solution.
-pub trait IndexStorage:
-    PrimInt + Pod + maybe_savefile::MaybeSavefile + sealed::Sealed + Send + Sync + 'static
-{
-    type LibsaisOutput: OutputElement;
-
-    #[doc(hidden)]
-    fn sample_suffix_array(
-        suffix_array_bytes: Vec<u8>,
-        sampling_rate: usize,
-        text_border_lookup: std::collections::HashMap<usize, Self>,
-    ) -> SampledSuffixArray<Self>;
-}
-
-impl sealed::Sealed for i32 {}
-
-impl IndexStorage for i32 {
-    type LibsaisOutput = i32;
-
-    fn sample_suffix_array(
-        suffix_array_bytes: Vec<u8>,
-        sampling_rate: usize,
-        text_border_lookup: std::collections::HashMap<usize, Self>,
-    ) -> SampledSuffixArray<Self> {
-        SampledSuffixArray::new_uncompressed(suffix_array_bytes, sampling_rate, text_border_lookup)
-    }
-}
-
-impl sealed::Sealed for u32 {}
-
-impl IndexStorage for u32 {
-    type LibsaisOutput = i64;
-
-    fn sample_suffix_array(
-        suffix_array_bytes: Vec<u8>,
-        sampling_rate: usize,
-        text_border_lookup: std::collections::HashMap<usize, Self>,
-    ) -> SampledSuffixArray<Self> {
-        SampledSuffixArray::new_u32_compressed(
-            suffix_array_bytes,
-            sampling_rate,
-            text_border_lookup,
-        )
-    }
-}
-
-impl sealed::Sealed for i64 {}
-
-impl IndexStorage for i64 {
-    type LibsaisOutput = i64;
-
-    fn sample_suffix_array(
-        suffix_array_bytes: Vec<u8>,
-        sampling_rate: usize,
-        text_border_lookup: std::collections::HashMap<usize, Self>,
-    ) -> SampledSuffixArray<Self> {
-        SampledSuffixArray::new_uncompressed(suffix_array_bytes, sampling_rate, text_border_lookup)
-    }
 }
 
 mod maybe_savefile {

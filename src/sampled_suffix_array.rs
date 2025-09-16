@@ -1,5 +1,5 @@
-use libsais::OutputElement;
-use num_traits::NumCast;
+use bytemuck::Pod;
+use num_traits::{NumCast, PrimInt};
 
 use std::{collections::HashMap, marker::PhantomData, ops::Range};
 
@@ -15,7 +15,7 @@ pub struct SampledSuffixArray<I> {
     _compression_marker: PhantomData<I>,
 }
 
-impl<I: OutputElement> SampledSuffixArray<I> {
+impl<I: PrimInt + Pod> SampledSuffixArray<I> {
     pub(crate) fn new_uncompressed(
         mut suffix_array_bytes: Vec<u8>,
         sampling_rate: usize,

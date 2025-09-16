@@ -1,4 +1,6 @@
-use genedex::{FmIndex, FmIndexConfig, Hit, IndexStorage, alphabet, block::Block64};
+use genedex::{
+    FmIndex, FmIndexConfig, Hit, IndexStorage, PerformancePriority, alphabet, block::Block64,
+};
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -295,7 +297,8 @@ proptest! {
         suffix_array_sampling_rate in 1usize..=64,
         num_threads in 1u16..4,
         lookup_table_depth in 0usize..6,
-        seed in any::<u64>()
+        performance_priority in (0usize..3).prop_map(|i| [PerformancePriority::Balanced, PerformancePriority::HighSpeed, PerformancePriority::LowMemory][i]),
+        seed in any::<u64>(),
     ) {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads as usize)
@@ -312,15 +315,15 @@ proptest! {
         pool.install(|| {
             let index_i32 = FmIndexConfig::<i32>::new()
                 .lookup_table_depth(lookup_table_depth)
-                .suffix_array_sampling_rate(suffix_array_sampling_rate)
+                .suffix_array_sampling_rate(suffix_array_sampling_rate).construction_performance_priority(performance_priority)
                 .construct_index(&texts, alphabet::ascii_dna());
             let index_u32 = FmIndexConfig::<u32>::new()
                 .lookup_table_depth(lookup_table_depth)
-                .suffix_array_sampling_rate(suffix_array_sampling_rate)
+                .suffix_array_sampling_rate(suffix_array_sampling_rate).construction_performance_priority(performance_priority)
                 .construct_index(&texts, alphabet::ascii_dna_with_n());
             let index_i64 = FmIndexConfig::<i64>::new()
                 .lookup_table_depth(lookup_table_depth)
-                .suffix_array_sampling_rate(suffix_array_sampling_rate)
+                .suffix_array_sampling_rate(suffix_array_sampling_rate).construction_performance_priority(performance_priority)
                 .construct_index(&texts, alphabet::ascii_dna_iupac_as_dna_with_n());
 
             run_queries(&index_i32, &existing_queries,&random_queries, &random_queries_naive_hits);
