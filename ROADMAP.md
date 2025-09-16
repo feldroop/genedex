@@ -1,7 +1,6 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
-- remove unnecesary checks using `unsafe`
-- optimized block layout, lookup table index computation
+- make Block512 default again? (depends on benchmark results)
 - improved build memory usage: 
     - configurable, slower low memory mode
     - u32 saca (maybe sais-drum)
@@ -11,6 +10,7 @@
 - more flexible alphabet API
     - allow alphabet with sentinel inclded in io representation
     - allow alphabet without sentinel (only usable for single text indexing)
+- faster lookup table index computation
 - optimized version for single text without sentinel
 - optimized construction directly from (fasta) file reader
 - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome)
