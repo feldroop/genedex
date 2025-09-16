@@ -7,15 +7,16 @@
 The [FM-Index] is a full-text index data structure that allows efficiently counting and retrieving all occurrenes of short sequences in very large texts. It is widely used in sequence analysis and bioinformatics.
 
 The implementation of this library is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
-by Simon Gene Gottlieb (publication pending). This encoding attemps to provide a good trade-off between
+by Simon Gene Gottlieb (publication pending), who also was a great help while developing this library. This encoding attemps to provide a good trade-off between
 memory usage and running time of queries. Further benefits of `genedex` include:
 
-- Fast, parallel index construction by leveraging the [`libsais-rs`] crate
-- Support for indexing a set of texts, like chromosomes of a genome
-- Flexible cursor API
-- Thoroughly tested using [`proptest`]
+- Fast, parallel index construction by leveraging the [`libsais-rs`] crate.
+- Support for indexing a set of texts, like chromosomes of a genome.
+- A flexible cursor API.
+- Fast reading and writing the FM-Index from/to files, using [`savefile`].
+- Thoroughly tested using [`proptest`].
 
-⚠️ **Warning:** this library is in an early stage. The API is still subject to changes. Currently, only a basic FM-Index is impkemented. For upcoming features, take a look at the [roadmap](./ROADMAP.md). Any kind of feedback and suggestions via the issue tracker is highly appreciated! ⚠️
+⚠️ **Warning:** this library is in an early stage. The API is still subject to changes. Currently, only a basic FM-Index is implemented. For upcoming features, take a look at the [roadmap]. Any kind of feedback and suggestions via the issue tracker is highly appreciated! ⚠️
 
 ## Usage
 
@@ -46,5 +47,7 @@ Work in progress. Can be found [here](https://github.com/feldroop/rust-fmindex-b
 
 [FM-Index]: https://doi.org/10.1109/SFCS.2000.892127
 [`libsais-rs`]: https://github.com/feldroop/libsais-rs
+[`savefile`]: https://github.com/avl/savefile
 [`proptest`]: https://github.com/proptest-rs/proptest
+[roadmap]: ./ROADMAP.md
 [documentation]: https://docs.rs/genedex
