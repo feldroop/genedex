@@ -1,5 +1,3 @@
-use std::slice;
-
 use crate::maybe_savefile::MaybeSavefile;
 
 // this distinction of block types only exists to be able to set repr(align(64)) for the 512 bit block
@@ -21,53 +19,22 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync + MaybeSavefile + '
     const NUM_U64: usize = Self::NUM_BITS / 64;
 
     #[doc(hidden)]
-    fn from_init_store(init_store: u64) -> Self;
+    fn zeroes() -> Self;
 
     #[doc(hidden)]
-    fn zeroes() -> Self {
-        Self::from_init_store(0)
-    }
+    fn negate(&mut self);
 
     #[doc(hidden)]
-    fn ones() -> Self {
-        Self::from_init_store(u64::MAX)
-    }
+    fn set_to_self_and(&mut self, other: Self);
 
     #[doc(hidden)]
-    fn as_raw_slice(&self) -> &[u64];
-    #[doc(hidden)]
-    fn as_raw_mut_slice(&mut self) -> &mut [u64];
+    fn count_ones_before(&self, idx: usize) -> usize;
 
     #[doc(hidden)]
-    fn negate(&mut self) {
-        for store in self.as_raw_mut_slice() {
-            *store = !(*store);
-        }
-    }
+    fn get_bit(&self, idx: usize) -> u8;
 
     #[doc(hidden)]
-    fn set_to_self_and(&mut self, other: Self) {
-        for (store, other_store) in self.as_raw_mut_slice().iter_mut().zip(other.as_raw_slice()) {
-            *store &= other_store;
-        }
-    }
-
-    #[doc(hidden)]
-    fn count_ones(&self) -> usize {
-        self.as_raw_slice()
-            .iter()
-            .map(|s| s.count_ones() as usize)
-            .sum()
-    }
-
-    #[doc(hidden)]
-    fn get_bit(&self, index: usize) -> u8;
-
-    #[doc(hidden)]
-    fn set_bit_assuming_zero(&mut self, index: usize, bit: u8);
-
-    #[doc(hidden)]
-    fn zeroize_bits_starting_from(&mut self, idx: usize);
+    fn set_bit_assuming_zero(&mut self, idx: usize, bit: u8);
 }
 
 /// Larger blocks, recommended for alphabets with many dense symbols.
@@ -85,40 +52,46 @@ impl MaybeSavefile for Block512 {}
 impl Block for Block512 {
     const NUM_BITS: usize = 512;
 
-    fn from_init_store(init_store: u64) -> Self {
-        Self {
-            data: [init_store; 8],
-        }
+    fn zeroes() -> Self {
+        Self { data: [0; 8] }
     }
 
-    fn as_raw_slice(&self) -> &[u64] {
-        &self.data
-    }
-
-    fn as_raw_mut_slice(&mut self) -> &mut [u64] {
-        &mut self.data
-    }
-
-    fn get_bit(&self, index: usize) -> u8 {
-        let store_index = index / 64;
-        let index_in_store = index % 64;
-        ((self.data[store_index] >> index_in_store) & 1) as u8
-    }
-
-    fn set_bit_assuming_zero(&mut self, index: usize, bit: u8) {
-        let store_index = index / 64;
-        let index_in_store = index % 64;
-        self.data[store_index] |= (bit as u64) << index_in_store;
-    }
-
-    fn zeroize_bits_starting_from(&mut self, idx: usize) {
-        let mask = BLOCK512_MASKS[idx];
+    #[doc(hidden)]
+    fn negate(&mut self) {
         for i in 0..8 {
-            // SAFETY: the size of self.data and the mask is known to be 8 at compile time
-            unsafe {
-                *self.data.get_unchecked_mut(i) &= *mask.get_unchecked(i);
-            }
+            self.data[i] = !self.data[i];
         }
+    }
+
+    #[doc(hidden)]
+    fn set_to_self_and(&mut self, other: Self) {
+        for i in 0..8 {
+            self.data[i] &= other.data[i];
+        }
+    }
+
+    fn get_bit(&self, idx: usize) -> u8 {
+        let store_idx = idx / 64;
+        let idx_in_store = idx % 64;
+        ((self.data[store_idx] >> idx_in_store) & 1) as u8
+    }
+
+    fn set_bit_assuming_zero(&mut self, idx: usize, bit: u8) {
+        let store_idx = idx / 64;
+        let idx_in_store = idx % 64;
+        self.data[store_idx] |= (bit as u64) << idx_in_store;
+    }
+
+    fn count_ones_before(&self, idx: usize) -> usize {
+        let mut sum = 0;
+
+        let mask = BLOCK512_MASKS[idx];
+
+        for i in 0..8 {
+            sum += (self.data[i] & mask[i]).count_ones();
+        }
+
+        sum as usize
     }
 }
 
@@ -136,75 +109,62 @@ impl MaybeSavefile for Block64 {}
 impl Block for Block64 {
     const NUM_BITS: usize = 64;
 
-    fn from_init_store(init_store: u64) -> Self {
-        Self { data: init_store }
+    fn zeroes() -> Self {
+        Self { data: 0 }
     }
 
-    fn as_raw_slice(&self) -> &[u64] {
-        slice::from_ref(&self.data)
+    fn negate(&mut self) {
+        self.data = !self.data;
     }
 
-    fn as_raw_mut_slice(&mut self) -> &mut [u64] {
-        slice::from_mut(&mut self.data)
+    fn set_to_self_and(&mut self, other: Self) {
+        self.data = self.data & other.data;
     }
 
-    fn get_bit(&self, index: usize) -> u8 {
-        ((self.data >> index) & 1) as u8
+    fn get_bit(&self, idx: usize) -> u8 {
+        ((self.data >> idx) & 1) as u8
     }
 
-    fn set_bit_assuming_zero(&mut self, index: usize, bit: u8) {
-        self.data |= (bit as u64) << index;
+    fn set_bit_assuming_zero(&mut self, idx: usize, bit: u8) {
+        self.data |= (bit as u64) << idx;
     }
 
-    fn zeroize_bits_starting_from(&mut self, idx: usize) {
-        self.data &= BLOCK64_MASKS[idx];
+    fn count_ones_before(&self, idx: usize) -> usize {
+        let masked_data = self.data & !(u64::MAX << idx);
+        masked_data.count_ones() as usize
     }
 }
-
-// generates 000...000, 000...001, 111...111
-const BLOCK64_MASKS: [u64; 64] = const {
-    let mut masks = [u64::MAX; 64];
-    let mut bit_index = 0;
-
-    while bit_index < 64 {
-        masks[bit_index] <<= bit_index;
-        masks[bit_index] = !masks[bit_index];
-        bit_index += 1;
-    }
-
-    masks
-};
 
 // the same as BLOCK64_MASKS, but with 512 bits
 const BLOCK512_MASKS: [[u64; 8]; 512] = const {
     let mut masks = [[0; 8]; 512];
 
-    let mut block64_index = 0;
+    let mut block64_idx = 0;
 
-    while block64_index < 8 {
-        let mut bit_index = 0;
-        while bit_index < 64 {
-            masks[block64_index * 64 + bit_index][block64_index] = BLOCK64_MASKS[bit_index];
+    while block64_idx < 8 {
+        let mut bit_idx = 0;
+        while bit_idx < 64 {
+            masks[block64_idx * 64 + bit_idx][block64_idx] = !(u64::MAX << bit_idx);
 
-            bit_index += 1;
+            bit_idx += 1;
         }
 
-        block64_index += 1;
+        block64_idx += 1;
     }
 
-    let mut mask_index = 0;
+    let mut mask_idx = 0;
 
-    while mask_index < 512 {
-        let complete_64blocks_below = mask_index / 64;
+    while mask_idx < 512 {
+        let complete_64blocks_below = mask_idx / 64;
 
-        let mut block64_index = 0;
-        while block64_index < complete_64blocks_below {
-            masks[mask_index][block64_index] = u64::MAX;
+        let mut block64_idx = 0;
+        while block64_idx < complete_64blocks_below {
+            masks[mask_idx][block64_idx] = u64::MAX;
 
-            block64_index += 1;
+            block64_idx += 1;
         }
 
-        mask_index += 1;
+        mask_idx += 1;
     }
 
     masks
@@ -213,17 +173,3 @@ const BLOCK512_MASKS: [[u64; 8]; 512] = const {
 mod sealed {
     pub trait Sealed {}
 }
-
-// #[test]
-// fn feature() {
-//     // for mask in BLOCK64_MASKS {
-//     //     println!("{:064b}", mask);
-//     // }
-
-//     for mask in &BLOCK512_MASKS[350..] {
-//         println!(
-//             "{:064b} {:064b} {:064b} {:064b} {:064b} {:064b} {:064b} {:064b}\n",
-//             mask[0], mask[1], mask[2], mask[3], mask[4], mask[5], mask[6], mask[7]
-//         );
-//     }
-// }

@@ -23,15 +23,23 @@ impl<'a, I: IndexStorage, B: Block> Cursor<'a, I, B> {
     /// The running time is in O(1).
     pub fn extend_query_front(&mut self, symbol: u8) {
         let symbol = self.index.alphabet.io_to_dense_representation(symbol);
-        self.extend_front_without_alphabet_translation(symbol);
+
+        // SAFETY: symbol was just checked
+        unsafe { self.extend_front_without_alphabet_translation(symbol) };
     }
 
-    pub(crate) fn extend_front_without_alphabet_translation(&mut self, symbol: u8) {
+    // SAFETY precondition: symbols must be valid  in dense representation for th alphabet
+    pub(crate) unsafe fn extend_front_without_alphabet_translation(&mut self, symbol: u8) {
+        // SAFETY: the cursor always maintains a valid intervals of the text, and the symbol is valid in dense representation
         let (start, end) = if self.interval.start != self.interval.end {
-            (
-                self.index.lf_mapping_step(symbol, self.interval.start),
-                self.index.lf_mapping_step(symbol, self.interval.end),
-            )
+            unsafe {
+                (
+                    self.index
+                        .lf_mapping_step_unchecked(symbol, self.interval.start),
+                    self.index
+                        .lf_mapping_step_unchecked(symbol, self.interval.end),
+                )
+            }
         } else {
             (self.interval.start, self.interval.end)
         };
@@ -58,6 +66,7 @@ impl<'a, I: IndexStorage, B: Block> Cursor<'a, I, B> {
     /// This operation needs `s / 2` steps on average, where `s` is the suffix array
     /// sampling rate of the index.
     pub fn locate(&self) -> impl Iterator<Item = Hit> {
-        self.index.locate_interval(self.interval)
+        // SAFETY: the interval of the cursor is always valid for the text
+        unsafe { self.index.locate_interval(self.interval) }
     }
 }

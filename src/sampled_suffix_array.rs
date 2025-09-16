@@ -97,7 +97,8 @@ impl SampledSuffixArray<u32> {
 }
 
 impl<I: IndexStorage> SampledSuffixArray<I> {
-    pub(crate) fn recover_range<B: Block>(
+    // SAFETY precondition: the range must be valid for the text
+    pub(crate) unsafe fn recover_range<B: Block>(
         &self,
         range: Range<usize>,
         index: &FmIndex<I, B>,
@@ -113,7 +114,9 @@ impl<I: IndexStorage> SampledSuffixArray<I> {
                         .unwrap();
                 }
 
-                i = index.lf_mapping_step(bwt_symbol, i);
+                // SAFETY: the bwt symbol recovered from the text with rank support must be valid for the alphabet in dense representation
+                // the index must also be valid, because, according to the precondition
+                i = unsafe { index.lf_mapping_step_unchecked(bwt_symbol, i) };
 
                 num_steps_done = num_steps_done + I::one();
             }
@@ -143,12 +146,15 @@ mod tests {
             .lookup_table_depth(4)
             .suffix_array_sampling_rate(1)
             .construct_index(texts, alphabet);
+        let recovered_array: Vec<_> = unsafe {
+            sampled_index
+                .suffix_array
+                .recover_range(0..n, &sampled_index)
+                .collect()
+        };
 
-        let recovered_array: Vec<_> = sampled_index
-            .suffix_array
-            .recover_range(0..n, &sampled_index)
-            .collect();
-        let copied_array: Vec<_> = index.suffix_array.recover_range(0..n, &index).collect();
+        let copied_array: Vec<_> =
+            unsafe { index.suffix_array.recover_range(0..n, &index).collect() };
 
         assert_eq!(copied_array, recovered_array);
     }

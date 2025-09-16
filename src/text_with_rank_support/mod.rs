@@ -36,7 +36,7 @@ impl<I: PrimInt + Send + Sync, B: Block> TextWithRankSupport<I, B> {
     pub fn construct(text: &[u8], alphabet_size: usize) -> Self {
         assert!(alphabet_size >= 2);
 
-        let alphabet_num_bits = ilog2_ceil(alphabet_size);
+        let alphabet_num_bits = ilog2_ceil_for_nonzero(alphabet_size);
         let len: usize = text.len() + 1;
         let superblock_size = u16::MAX as usize + 1;
 
@@ -100,7 +100,7 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
     /// The running time is in O(1).
     pub fn rank(&self, mut symbol: u8, idx: usize) -> usize {
         let symbol_usize = symbol as usize;
-        let alphabet_num_bits = ilog2_ceil(self.alphabet_size);
+        let alphabet_num_bits = ilog2_ceil_for_nonzero(self.alphabet_size);
 
         let superblock_size = u16::MAX as usize + 1;
         let superblock_offset_index = (idx / superblock_size) * self.alphabet_size + symbol_usize;
@@ -132,8 +132,73 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
         }
 
         let index_in_block = idx % B::NUM_BITS;
-        accumulator_block.zeroize_bits_starting_from(index_in_block);
-        let block_count = accumulator_block.count_ones();
+        let block_count = accumulator_block.count_ones_before(index_in_block);
+
+        superblock_offset + block_offset + block_count
+    }
+
+    /// Version of [`rank`](Self::rank) without bounds checks.
+    ///
+    /// The running time is in O(1).
+    ///
+    /// # Safety
+    ///
+    /// `idx` must be in the interval `[0, text.len()]` and `symbol` must be smaller than alphabet size.
+    pub unsafe fn rank_unchecked(&self, mut symbol: u8, idx: usize) -> usize {
+        // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
+        // and since the alphabet has a size of at least 2
+
+        let symbol_usize = symbol as usize;
+        let alphabet_num_bits = ilog2_ceil_for_nonzero(self.alphabet_size);
+
+        let superblock_size = u16::MAX as usize + 1;
+        let superblock_offset_index = (idx / superblock_size) * self.alphabet_size + symbol_usize;
+
+        let superblock_offset = unsafe {
+            *self
+                .interleaved_superblock_offsets
+                .get_unchecked(superblock_offset_index)
+        };
+
+        // SAFETY: must succeed, otherwise the construction function would have crashed
+        let superblock_offset =
+            unsafe { <usize as NumCast>::from(superblock_offset).unwrap_unchecked() };
+
+        let block_offset_index = (idx / B::NUM_BITS) * self.alphabet_size + symbol_usize;
+        let block_offset = unsafe {
+            *self
+                .interleaved_block_offsets
+                .get_unchecked(block_offset_index)
+        } as usize;
+
+        let interleaved_blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
+        let interleaved_blocks_end = interleaved_blocks_start + alphabet_num_bits;
+
+        let interleaved_blocks = unsafe {
+            &self
+                .interleaved_blocks
+                .get_unchecked(interleaved_blocks_start..interleaved_blocks_end)
+        };
+
+        let mut accumulator_block = unsafe { *interleaved_blocks.get_unchecked(0) };
+        if symbol & 1 == 0 {
+            accumulator_block.negate();
+        }
+
+        for i in 1..alphabet_num_bits {
+            let mut block = unsafe { *interleaved_blocks.get_unchecked(i) };
+
+            symbol >>= 1;
+
+            if symbol & 1 == 0 {
+                block.negate();
+            }
+
+            accumulator_block.set_to_self_and(block);
+        }
+
+        let index_in_block = idx % B::NUM_BITS;
+        let block_count = accumulator_block.count_ones_before(index_in_block);
 
         superblock_offset + block_offset + block_count
     }
@@ -142,7 +207,7 @@ impl<I: PrimInt, B: Block> TextWithRankSupport<I, B> {
     ///
     /// The running time is in O(1).
     pub fn symbol_at(&self, idx: usize) -> u8 {
-        let alphabet_num_bits = ilog2_ceil(self.alphabet_size);
+        let alphabet_num_bits = ilog2_ceil_for_nonzero(self.alphabet_size);
         let blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
         let blocks_end = blocks_start + alphabet_num_bits;
 
@@ -172,7 +237,7 @@ fn fill_superblock<I: PrimInt, B: Block>(
     interleaved_blocks: &mut [B],
     alphabet_size: usize,
 ) {
-    let alphabet_num_bits = ilog2_ceil(alphabet_size);
+    let alphabet_num_bits = ilog2_ceil_for_nonzero(alphabet_size);
     let mut block_offsets_sum = vec![0; alphabet_size];
 
     let text_block_iter = text.chunks(B::NUM_BITS);
@@ -211,10 +276,6 @@ fn fill_superblock<I: PrimInt, B: Block>(
     }
 }
 
-fn ilog2_ceil(value: usize) -> usize {
-    if value.is_power_of_two() {
-        value.ilog2() as usize
-    } else {
-        (value.ilog2() + 1) as usize
-    }
+fn ilog2_ceil_for_nonzero(value: usize) -> usize {
+    usize::BITS as usize - value.leading_zeros() as usize - value.is_power_of_two() as usize
 }
