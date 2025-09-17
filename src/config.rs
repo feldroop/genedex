@@ -74,7 +74,7 @@ impl<I: IndexStorage, B: Block> Default for FmIndexConfig<I, B> {
         Self {
             suffix_array_sampling_rate: 4,
             lookup_table_depth: 8,
-            performance_priority: PerformancePriority::Balanced,
+            performance_priority: PerformancePriority::HighSpeed,
             _index_storage_marker: PhantomData,
             _block_marker: PhantomData,
         }
@@ -84,11 +84,13 @@ impl<I: IndexStorage, B: Block> Default for FmIndexConfig<I, B> {
 /// This enum can be supplied to the [`FmIndexConfig`] to select different sub-algorithms during the
 /// construction of the FM-Index.
 ///
-/// Currently, there is no difference ebetween th modes.
+/// The default is [`HighSpeed`](PerformancePriority::HighSpeed).
 #[derive(Debug, Clone, Copy)]
 pub enum PerformancePriority {
     HighSpeed,
     Balanced,
+    /// A slower, not parallel suffix array construction algorithm will be used for `u32`-based FM-Indices.
+    /// This can save a lot of memory when the sum of text lengths fits into a `u32`, but not into a `i32`.
     LowMemory,
 }
 

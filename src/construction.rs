@@ -24,7 +24,7 @@ use crate::{FmIndexConfig, TextWithRankSupport, maybe_savefile, sealed};
 pub trait IndexStorage:
     PrimInt + Pod + maybe_savefile::MaybeSavefile + sealed::Sealed + Send + Sync + 'static
 {
-    type LibsaisOutput: OutputElement;
+    type LibsaisOutput: OutputElement + IndexStorage;
 
     #[doc(hidden)]
     fn construct_libsais_suffix_array(
@@ -60,6 +60,7 @@ pub trait IndexStorage:
         text: &[u8],
         frequency_table: &mut [Self::LibsaisOutput],
         config: FmIndexConfig<Self, B>,
+        _alphabet: &Alphabet,
     ) -> (SampledSuffixArray<Self>, Vec<u8>) {
         let suffix_array_bytes = Self::construct_libsais_suffix_array(text, frequency_table);
         let suffix_array_buffer: &[Self::LibsaisOutput] = bytemuck::cast_slice(&suffix_array_bytes);
@@ -96,16 +97,15 @@ impl sealed::Sealed for u32 {}
 impl IndexStorage for u32 {
     type LibsaisOutput = i64;
 
+    #[cfg(feature = "u32-saca")]
     fn construct_sampled_suffix_array_and_bwt<B: Block>(
         text: &[u8],
         frequency_table: &mut [Self::LibsaisOutput],
         config: FmIndexConfig<Self, B>,
+        alphabet: &Alphabet,
     ) -> (SampledSuffixArray<Self>, Vec<u8>) {
-        // here is the place to inject the slower SACA for u32 in the future
         match config.performance_priority {
-            PerformancePriority::HighSpeed
-            | PerformancePriority::Balanced
-            | PerformancePriority::LowMemory => {
+            PerformancePriority::HighSpeed | PerformancePriority::Balanced => {
                 let suffix_array_bytes =
                     Self::construct_libsais_suffix_array(text, frequency_table);
                 let suffix_array_buffer: &[Self::LibsaisOutput] =
@@ -114,6 +114,27 @@ impl IndexStorage for u32 {
                 let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
 
                 let sampled_suffix_array = Self::sample_suffix_array_maybe_u32_compressed(
+                    suffix_array_bytes,
+                    config.suffix_array_sampling_rate,
+                    text_border_lookup,
+                );
+
+                (sampled_suffix_array, bwt)
+            }
+            PerformancePriority::LowMemory => {
+                let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<Self>()];
+                let suffix_array_buffer: &mut [Self] =
+                    bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+
+                sais_drum::SaisBuilder::new()
+                    .with_max_char((alphabet.num_dense_symbols() - 1) as u8)
+                    .construct_suffix_array_inplace(text, suffix_array_buffer);
+
+                let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
+
+                // NOT call Self::sample_suffix_array_maybe_u32_compressed, because after using u32 sais-drum
+                // the suffix array does not need ot be compressed
+                let sampled_suffix_array = SampledSuffixArray::new_uncompressed(
                     suffix_array_bytes,
                     config.suffix_array_sampling_rate,
                     text_border_lookup,
@@ -165,7 +186,7 @@ pub(crate) fn create_data_structures<I: IndexStorage, B: Block, T: AsRef<[u8]>>(
     let count = frequency_table_to_count(&frequency_table, alphabet.num_dense_symbols());
 
     let (sampled_suffix_array, bwt) =
-        I::construct_sampled_suffix_array_and_bwt(&text, &mut frequency_table, config);
+        I::construct_sampled_suffix_array_and_bwt(&text, &mut frequency_table, config, alphabet);
 
     let text_with_rank_support = TextWithRankSupport::construct(&bwt, alphabet.num_dense_symbols());
 
@@ -256,10 +277,11 @@ fn frequency_table_to_count<I: OutputElement>(
     count
 }
 
-fn bwt_from_suffix_array<I: IndexStorage>(
-    suffix_array: &[I::LibsaisOutput],
+// I2: current_suffix array indices, I2: IndexStorage we want to use for the FM-Index
+fn bwt_from_suffix_array<I1: IndexStorage, I2: IndexStorage>(
+    suffix_array: &[I1],
     text: &[u8],
-) -> (Vec<u8>, HashMap<usize, I>) {
+) -> (Vec<u8>, HashMap<usize, I2>) {
     let mut bwt = vec![0; text.len()];
 
     // collecting the text border lookup values while constructing the BWT made the function
@@ -301,7 +323,8 @@ fn bwt_from_suffix_array<I: IndexStorage>(
                             + inner_chunk_size * inner_chunk_index
                             + i;
 
-                        let text_index = <I as NumCast>::from(inner_suffix_array_chunk[i]).unwrap();
+                        let text_index =
+                            <I2 as NumCast>::from(inner_suffix_array_chunk[i]).unwrap();
                         text_border_lookup.insert(suffix_array_index, text_index);
                     }
                 }
