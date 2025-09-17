@@ -12,6 +12,7 @@ memory usage and running time of queries. Further benefits of `genedex` include:
 
 - Fast, parallel and memory efficient index construction by leveraging [`libsais-rs`] and [`rayon`].
 - Support for indexing a set of texts, like chromosomes of a genome.
+- Configurable, low-memory index construction
 - A flexible cursor API.
 - Fast reading and writing the FM-Index from/to files, using [`savefile`].
 - Thoroughly tested using [`proptest`].
@@ -39,7 +40,7 @@ for hit in index.locate(query) {
         hit.text_id, hit.position
     );
 }
-``` 
+```
 
 ## Comparison to Other Crates and Benchmarks
 

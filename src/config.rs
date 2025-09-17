@@ -89,7 +89,8 @@ impl<I: IndexStorage, B: Block> Default for FmIndexConfig<I, B> {
 pub enum PerformancePriority {
     HighSpeed,
     Balanced,
-    /// A slower, not parallel suffix array construction algorithm will be used for `u32`-based FM-Indices.
+    /// A slower, not parallel suffix array construction algorithm will be used for `u32`-based FM-Indices,
+    /// if the `u32-saca` feature is activated (by default it is).
     /// This can save a lot of memory when the sum of text lengths fits into a `u32`, but not into a `i32`.
     LowMemory,
 }
