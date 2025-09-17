@@ -33,11 +33,6 @@
  * More information about the flexible [cursor](Cursor) API, build [configuration](FmIndexConfig) and [variants](block) of the FM-Index can
  * be found in the module-level and struct-level documentation.
  *
- * ## Safety
- *
- * This library internally contains a bunch of `unsafe`, which is used to remove bounds checks
- * from the `rank` function of [`TextWithRankSupport`] for a minor improvement in performance.
- *
  * [original paper]: https://doi.org/10.1109/SFCS.2000.892127
  * [`libsais-rs`]: https://github.com/feldroop/libsais-rs
  */
@@ -114,15 +109,11 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
             lookup_tables: LookupTables::new_empty(),
         };
 
-        // SAFETY: num_searchable_dense_symbols is always smaller than the alphabet size,
-        // because the sentinel is never searchable
-        unsafe {
-            lookup_table::fill_lookup_tables(
-                &mut index,
-                config.lookup_table_depth,
-                num_searchable_dense_symbols,
-            );
-        }
+        lookup_table::fill_lookup_tables(
+            &mut index,
+            config.lookup_table_depth,
+            num_searchable_dense_symbols,
+        );
 
         index
     }
@@ -143,23 +134,19 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     pub fn locate(&self, query: &[u8]) -> impl Iterator<Item = Hit> {
         let cursor = self.cursor_for_query(query);
 
-        // SAFETY: the cursor interval is always a valid range for the text
-        unsafe { self.locate_interval(cursor.interval()) }
+        self.locate_interval(cursor.interval())
     }
 
-    // SAFETY precondition: the interval must be a valid range for the text
-    unsafe fn locate_interval(&self, interval: HalfOpenInterval) -> impl Iterator<Item = Hit> {
-        unsafe {
-            self.suffix_array
-                .recover_range(interval.start..interval.end, self)
-                .map(|idx| {
-                    let (text_id, position) = self.text_ids.backtransfrom_concatenated_text_index(
-                        <usize as NumCast>::from(idx).unwrap(),
-                    );
+    fn locate_interval(&self, interval: HalfOpenInterval) -> impl Iterator<Item = Hit> {
+        self.suffix_array
+            .recover_range(interval.start..interval.end, self)
+            .map(|idx| {
+                let (text_id, position) = self
+                    .text_ids
+                    .backtransfrom_concatenated_text_index(<usize as NumCast>::from(idx).unwrap());
 
-                    Hit { text_id, position }
-                })
-        }
+                Hit { text_id, position }
+            })
     }
 
     /// Returns a cursor to the index with the empty query currently searched.
@@ -184,11 +171,10 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
             .rev()
             .map(|&s| self.alphabet.io_to_dense_representation(s));
 
-        unsafe { self.cursor_for_iter_without_alphabet_translation(query_iter) }
+        self.cursor_for_iter_without_alphabet_translation(query_iter)
     }
 
-    // SAFETY precondition: symbols must be valid in dense representation for the alphabet
-    unsafe fn cursor_for_iter_without_alphabet_translation<'a, Q>(
+    fn cursor_for_iter_without_alphabet_translation<'a, Q>(
         &'a self,
         query: impl IntoIterator<IntoIter = Q>,
     ) -> Cursor<'a, I, B>
@@ -206,8 +192,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
         };
 
         for symbol in query_iter {
-            // SAFETY: symbols are valid in dense representation for hte alphabet according to precondition
-            unsafe { cursor.extend_front_without_alphabet_translation(symbol) };
+            cursor.extend_front_without_alphabet_translation(symbol);
 
             if cursor.count() == 0 {
                 break;
@@ -217,10 +202,8 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
         cursor
     }
 
-    // SAFETY preconditions: idx must be in [0, text.len()] and symbol must be valid in dense representation
-    unsafe fn lf_mapping_step_unchecked(&self, symbol: u8, idx: usize) -> usize {
-        self.count[symbol as usize]
-            + unsafe { self.text_with_rank_support.rank_unchecked(symbol, idx) }
+    fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
+        self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
     }
 
     pub fn alphabet(&self) -> &Alphabet {

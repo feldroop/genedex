@@ -4,8 +4,7 @@
 - interleave superblocks and blocks
 - improved build memory usage:
     - u32 saca (sais-drum)
-    - maybe BWT view optimization
-    - maybe compress compress text and/or bwt at some point during construction 
+    - maybe compress compress text and/or bwt at some point during construction (half/half buffer)
 - more flexible alphabet API
     - allow alphabet with sentinel inclded in io representation
     - allow alphabet without sentinel (only usable for single text indexing)

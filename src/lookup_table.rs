@@ -29,8 +29,7 @@ impl<I: IndexStorage> LookupTables<I> {
     }
 }
 
-// SAFETY precondition: num symbols must be smaller than the alphabet size of the index
-pub(crate) unsafe fn fill_lookup_tables<I: IndexStorage, B: Block>(
+pub(crate) fn fill_lookup_tables<I: IndexStorage, B: Block>(
     index: &mut FmIndex<I, B>,
     max_depth: usize,
     num_symbols: usize,
@@ -39,13 +38,10 @@ pub(crate) unsafe fn fill_lookup_tables<I: IndexStorage, B: Block>(
 
     // iteratively fill lookup tables, to allow using the smaller tables in the search already for the larger tables
     for depth in 0..=max_depth {
-        // SAFETY: precondition is the same as of this function
-        unsafe {
-            index
-                .lookup_tables
-                .tables
-                .push(LookupTable::new(depth, num_symbols, &index));
-        }
+        index
+            .lookup_tables
+            .tables
+            .push(LookupTable::new(depth, num_symbols, &index));
     }
 }
 
@@ -57,16 +53,14 @@ struct LookupTable<I> {
 }
 
 impl<I: IndexStorage> LookupTable<I> {
-    // SAFETY precondition: num symbols must be smaller than the alphabet size of the index
-    unsafe fn new<B: Block>(depth: usize, num_symbols: usize, index: &FmIndex<I, B>) -> Self {
+    fn new<B: Block>(depth: usize, num_symbols: usize, index: &FmIndex<I, B>) -> Self {
         let num_values = num_symbols.pow(depth as u32);
         let mut data = vec![(I::zero(), I::zero()); num_values];
 
         let mut query = vec![0; depth];
 
         if depth > 0 {
-            // SAFETY: precondition is the same as of this function
-            unsafe { fill_table(1, depth, num_symbols, 0, &mut data, &mut query, index) };
+            fill_table(1, depth, num_symbols, 0, &mut data, &mut query, index);
         } else {
             data[0] = (
                 <I as NumCast>::from(0).unwrap(),
@@ -101,8 +95,7 @@ impl<I: IndexStorage> LookupTable<I> {
     }
 }
 
-// SAFETY precondition: num symbols must be smaller than the alphabet size of the index
-unsafe fn fill_table<I: IndexStorage, B: Block>(
+fn fill_table<I: IndexStorage, B: Block>(
     curr_depth: usize,
     max_depth: usize,
     num_symbols: usize,
@@ -114,13 +107,11 @@ unsafe fn fill_table<I: IndexStorage, B: Block>(
     if curr_depth == max_depth {
         for symbol in 0..num_symbols {
             query[curr_depth - 1] = symbol as u8 + 1; // +1 to offset sentinel
-            // SAFETY: num symbols is smaller than the alphabet size and therefore all symbols in query are valid in
-            // the dense representation for the alphabet
-            let interval = unsafe {
-                index
-                    .cursor_for_iter_without_alphabet_translation(query.iter().copied())
-                    .interval()
-            };
+
+            let interval = index
+                .cursor_for_iter_without_alphabet_translation(query.iter().copied())
+                .interval();
+
             data[curr_data_idx + symbol] = (
                 <I as NumCast>::from(interval.start).unwrap(),
                 <I as NumCast>::from(interval.end).unwrap(),
@@ -134,16 +125,14 @@ unsafe fn fill_table<I: IndexStorage, B: Block>(
         let exponent = max_depth - curr_depth;
         let next_data_index = curr_data_idx + symbol * num_symbols.pow(exponent as u32);
         query[curr_depth - 1] = symbol as u8 + 1; // +1 to offset sentinel
-        unsafe {
-            fill_table(
-                curr_depth + 1,
-                max_depth,
-                num_symbols,
-                next_data_index,
-                data,
-                query,
-                index,
-            );
-        }
+        fill_table(
+            curr_depth + 1,
+            max_depth,
+            num_symbols,
+            next_data_index,
+            data,
+            query,
+            index,
+        );
     }
 }
