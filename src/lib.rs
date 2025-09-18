@@ -68,7 +68,9 @@ use construction::DataStructures;
 use lookup_table::LookupTables;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
-use text_with_rank_support::{Block64, CondensedTextWithRankSupport, TextWithRankSupport};
+use text_with_rank_support::{
+    Block64, Block512, CondensedTextWithRankSupport, FlatTextWithRankSupport, TextWithRankSupport,
+};
 
 /// The FM-Index data structure.
 ///
@@ -82,6 +84,18 @@ pub struct FmIndex<I, R = CondensedTextWithRankSupport<I, Block64>> {
     text_ids: TexdIdSearchTree,
     lookup_tables: LookupTables<I>,
 }
+
+/// A little faster than [`FmIndexCondensed512`], but still space efficient for larger alphabets.
+pub type FmIndexCondensed64<I> = FmIndex<I, CondensedTextWithRankSupport<I, Block64>>;
+
+/// The most space efficent version.
+pub type FmIndexCondensed512<I> = FmIndex<I, CondensedTextWithRankSupport<I, Block512>>;
+
+/// The fastest version.
+pub type FmIndexFlat64<I> = FmIndex<I, FlatTextWithRankSupport<I, Block64>>;
+
+/// A little smaller and slower than [`FmIndexFlat64`]. Not recommended for most applications.
+pub type FmIndexFlat512<I> = FmIndex<I, FlatTextWithRankSupport<I, Block512>>;
 
 impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     fn new<T: AsRef<[u8]>>(
