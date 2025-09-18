@@ -13,7 +13,11 @@
 
 - compress text and/or bwt at some point during construction (half/half buffer)
 - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome)
-    - maybe leverage the fact that such characters often occur in runs
+    - maybe leverage the fact that such characters (namely N) often occur in runs
+    - the sentinel can not be searched. the current sampled suffix array implementation has special handling for it.
+        so it technically doesn't have to be stored in the text with rank support. If N also gets special handling,
+        the condensed text with rank support will get smaller and maybe faster. 
+        A text sampled suffix array could be an option, or a "sparse" text with rank support substructure.
 - paired blocks for improved memory usage when using larger alphabets
 - suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
 
@@ -26,7 +30,7 @@
 
 - gate rayon/OpenMP usage behind feature flag
 - optional functionality for text recovery
-- text sampled suffix array (optionally with text ids and other annotations),
+- text sampled suffix array (optionally with text ids and other annotations)
 
 ### Large topics, might never happen
 
