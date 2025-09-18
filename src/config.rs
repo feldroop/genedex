@@ -88,6 +88,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> Default for FmIndexConfig<I, R>
 #[derive(Debug, Clone, Copy)]
 pub enum PerformancePriority {
     HighSpeed,
+    /// This is currently equivalent to `HighSpeed`, but that will change in the future.
     Balanced,
     /// A slower, not parallel suffix array construction algorithm will be used for `u32`-based FM-Indices,
     /// if the `u32-saca` feature is activated (by default it is).

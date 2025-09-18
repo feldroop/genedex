@@ -14,6 +14,22 @@ pub use condensed::CondensedTextWithRankSupport;
 #[doc(inline)]
 pub use flat::FlatTextWithRankSupport;
 
+/// A trait for data structures central to the FM-Index of this library.
+///
+/// They can answer rank queries similar to the ones for bitvectors with rank support,
+/// but for a text with a given number of different symbols.
+///
+/// Currently, two different implementations exist, [`CondensedTextWithRankSupport`] and
+/// [`FlatTextWithRankSupport`]. Both of them can also be used with different block sizes (more info [here](Block)).
+///
+/// The condensed version is more space efficient, which is especially relevant for larger alphabets.
+/// The flat version is a bit faster, but has a higher memory usage.
+///
+/// In total, [`FlatTextWithRankSupport<Block64>`] is the fastest, and [`CondensedTextWithRankSupport<Block512>`]
+/// is the smallest configuration.
+///
+/// An example of how this data structure is used can be found
+/// [here](https://github.com/feldroop/genedex/blob/master/examples/text_with_rank_support.rs).
 pub trait TextWithRankSupport<I: IndexStorage>:
     sealed::Sealed + maybe_savefile::MaybeSavefile
 {

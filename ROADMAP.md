@@ -1,8 +1,5 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
-- integrate alternative rank impl into codebase and benchmark, docs for it
-- NO further encoding experiments
-- try a little bit about doing multiple rank operations at the same time (to effectively parallelize memory loads)
 
 ### Index for single texts
 

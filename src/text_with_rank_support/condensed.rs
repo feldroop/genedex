@@ -10,13 +10,7 @@ use rayon::prelude::*;
 // Blocks must be interleaved for efficient queries.
 // (Super)block offsets are only interleaved for faster (parallel) construction.
 
-/// This data structure is central to the FM-Index of this library.
-///
-/// It can answer rank queries similar to the ones for bitvectors with rank support,
-/// but for a text with a given number of different symbols.
-///
-/// An example of how this data structure is used can be found
-/// [here](https://github.com/feldroop/genedex/blob/master/examples/text_with_rank_support.rs).
+/// The more memory-efficient implementation of [`TextWithRankSupport`].
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug)]
 pub struct CondensedTextWithRankSupport<I, B = Block64> {
@@ -92,13 +86,11 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
         }
     }
 
-    #[inline(always)]
     fn rank(&self, symbol: u8, idx: usize) -> usize {
         assert!((symbol as usize) < self.alphabet_size && idx <= self.text_len);
         unsafe { self.rank_unchecked(symbol, idx) }
     }
 
-    #[inline(always)]
     unsafe fn rank_unchecked(&self, mut symbol: u8, idx: usize) -> usize {
         // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
         // and since the alphabet has a size of at least 2

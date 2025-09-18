@@ -1,8 +1,9 @@
 /*! This library contains an implementation of the FM-Index data structure ([original paper]).
  *
  * It is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
- * by Simon Gene Gottlieb (publication pending). This encoding attemps to provide a good trade-off between
- * memory usage and running time of queries.
+ * by Simon Gene Gottlieb. This encoding attemps to provide a good trade-off between
+ * memory usage and running time of queries. Another traditional encoding is provided with higher memory usage,
+ * but faster query running times.
  *
  * The library supports creating an FM-Index for a set of texts over an [alphabet]. The index construction
  * is based on the [`libsais-rs`] crate and parallelized.
@@ -30,7 +31,7 @@
  * }
  * ```
  *
- * More information about the flexible [cursor](Cursor) API, build [configuration](FmIndexConfig) and [variants](block) of the FM-Index can
+ * More information about the flexible [cursor](Cursor) API, build [configuration](FmIndexConfig) and [variants](TextWithRankSupport) of the FM-Index can
  * be found in the module-level and struct-level documentation.
  *
  * [original paper]: https://doi.org/10.1109/SFCS.2000.892127
@@ -39,6 +40,8 @@
 
 /// Contains functions to create various commonly used alphabets.
 pub mod alphabet;
+
+/// Different implementations of the text with rank support (a.k.a. occurrence table) data structure that powers the FM-Index.
 pub mod text_with_rank_support;
 
 mod config;
@@ -197,7 +200,6 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         cursor
     }
 
-    #[inline(always)]
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
         self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
     }
