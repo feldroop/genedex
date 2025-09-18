@@ -1,4 +1,6 @@
-use crate::{FmIndex, HalfOpenInterval, Hit, IndexStorage, text_with_rank_support::block::Block};
+use crate::{
+    FmIndex, HalfOpenInterval, Hit, IndexStorage, text_with_rank_support::TextWithRankSupport,
+};
 
 /// A cursor to the FM-Index.
 ///
@@ -12,12 +14,12 @@ use crate::{FmIndex, HalfOpenInterval, Hit, IndexStorage, text_with_rank_support
 /// An example of using the cursor API can be found
 /// [here](https://github.com/feldroop/genedex/blob/master/examples/cursor.rs).
 #[derive(Clone, Copy)]
-pub struct Cursor<'a, I, B> {
-    pub(crate) index: &'a FmIndex<I, B>,
+pub struct Cursor<'a, I, R> {
+    pub(crate) index: &'a FmIndex<I, R>,
     pub(crate) interval: HalfOpenInterval,
 }
 
-impl<'a, I: IndexStorage, B: Block> Cursor<'a, I, B> {
+impl<'a, I: IndexStorage, R: TextWithRankSupport<I>> Cursor<'a, I, R> {
     /// Extends the currently searched query at the front by one symbol.
     ///
     /// The running time is in O(1).

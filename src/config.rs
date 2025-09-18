@@ -1,20 +1,20 @@
 use crate::{
     Alphabet, FmIndex, IndexStorage,
-    text_with_rank_support::block::{Block, Block64},
+    text_with_rank_support::{Block64, CondensedTextWithRankSupport, TextWithRankSupport},
 };
 use std::marker::PhantomData;
 
 /// A builder-like API to configure and construct the FM-Index.
 #[derive(Clone, Copy)]
-pub struct FmIndexConfig<I, B = Block64> {
+pub struct FmIndexConfig<I, R = CondensedTextWithRankSupport<I, Block64>> {
     pub(crate) suffix_array_sampling_rate: usize,
     pub(crate) lookup_table_depth: usize,
     pub(crate) performance_priority: PerformancePriority,
     _index_storage_marker: PhantomData<I>,
-    _block_marker: PhantomData<B>,
+    _block_marker: PhantomData<R>,
 }
 
-impl<I: IndexStorage, B: Block> FmIndexConfig<I, B> {
+impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndexConfig<I, R> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -64,12 +64,12 @@ impl<I: IndexStorage, B: Block> FmIndexConfig<I, B> {
         self,
         texts: impl IntoIterator<Item = T>,
         alphabet: Alphabet,
-    ) -> FmIndex<I, B> {
+    ) -> FmIndex<I, R> {
         FmIndex::new(texts, alphabet, self)
     }
 }
 
-impl<I: IndexStorage, B: Block> Default for FmIndexConfig<I, B> {
+impl<I: IndexStorage, R: TextWithRankSupport<I>> Default for FmIndexConfig<I, R> {
     fn default() -> Self {
         Self {
             suffix_array_sampling_rate: 4,

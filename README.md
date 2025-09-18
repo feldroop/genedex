@@ -11,8 +11,8 @@ by Simon Gene Gottlieb (publication pending), who also was a great help while de
 memory usage and running time of queries. Further benefits of `genedex` include:
 
 - Fast, parallel and memory efficient index construction by leveraging [`libsais-rs`] and [`rayon`].
+- Configurable, very low memory mode for index construction.
 - Support for indexing a set of texts, like chromosomes of a genome.
-- Configurable, low-memory index construction
 - A flexible cursor API.
 - Fast reading and writing the FM-Index from/to files, using [`savefile`].
 - Thoroughly tested using [`proptest`].

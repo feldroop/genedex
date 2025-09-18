@@ -39,11 +39,11 @@
 
 /// Contains functions to create various commonly used alphabets.
 pub mod alphabet;
-mod config;
-mod cursor;
-mod text_with_rank_support;
+pub mod text_with_rank_support;
 
+mod config;
 mod construction;
+mod cursor;
 mod lookup_table;
 mod sampled_suffix_array;
 mod text_id_search_tree;
@@ -60,43 +60,38 @@ pub use config::PerformancePriority;
 pub use construction::IndexStorage;
 #[doc(inline)]
 pub use cursor::Cursor;
-#[doc(inline)]
-pub use text_with_rank_support::TextWithRankSupport;
-#[doc(inline)]
-pub use text_with_rank_support::block;
-
-use block::{Block, Block64};
 
 use construction::DataStructures;
 use lookup_table::LookupTables;
 use sampled_suffix_array::SampledSuffixArray;
 use text_id_search_tree::TexdIdSearchTree;
+use text_with_rank_support::{Block64, CondensedTextWithRankSupport, TextWithRankSupport};
 
 /// The FM-Index data structure.
 ///
 /// See [crate-level documentation](self) for details.
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-pub struct FmIndex<I, B = Block64> {
+pub struct FmIndex<I, R = CondensedTextWithRankSupport<I, Block64>> {
     alphabet: Alphabet,
     count: Vec<usize>,
-    text_with_rank_support: TextWithRankSupport<I, B>,
+    text_with_rank_support: R,
     suffix_array: SampledSuffixArray<I>,
     text_ids: TexdIdSearchTree,
     lookup_tables: LookupTables<I>,
 }
 
-impl<I: IndexStorage, B: Block> FmIndex<I, B> {
+impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     fn new<T: AsRef<[u8]>>(
         texts: impl IntoIterator<Item = T>,
         alphabet: Alphabet,
-        config: FmIndexConfig<I, B>,
+        config: FmIndexConfig<I, R>,
     ) -> Self {
         let DataStructures {
             count,
             sampled_suffix_array,
             text_ids,
             text_with_rank_support,
-        } = construction::create_data_structures::<I, B, T>(texts, config, &alphabet);
+        } = construction::create_data_structures::<I, R, T>(texts, &config, &alphabet);
 
         let num_searchable_dense_symbols = alphabet.num_searchable_dense_symbols();
 
@@ -152,7 +147,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     /// Returns a cursor to the index with the empty query currently searched.
     ///
     /// See [`Cursor`] for details. Running time is in `O(1)`.
-    pub fn cursor_empty<'a>(&'a self) -> Cursor<'a, I, B> {
+    pub fn cursor_empty<'a>(&'a self) -> Cursor<'a, I, R> {
         Cursor {
             index: self,
             interval: HalfOpenInterval {
@@ -165,7 +160,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     /// Returns a cursor to the index with `query` currently searched.
     ///
     /// See [`Cursor`] for details. Running time is the same as for [`count`](Self::count).
-    pub fn cursor_for_query<'a>(&'a self, query: &[u8]) -> Cursor<'a, I, B> {
+    pub fn cursor_for_query<'a>(&'a self, query: &[u8]) -> Cursor<'a, I, R> {
         let query_iter = query
             .iter()
             .rev()
@@ -177,7 +172,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     fn cursor_for_iter_without_alphabet_translation<'a, Q>(
         &'a self,
         query: impl IntoIterator<IntoIter = Q>,
-    ) -> Cursor<'a, I, B>
+    ) -> Cursor<'a, I, R>
     where
         Q: ExactSizeIterator<Item = u8>,
     {
@@ -202,6 +197,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
         cursor
     }
 
+    #[inline(always)]
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
         self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
     }
@@ -218,24 +214,25 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
     pub fn total_text_len(&self) -> usize {
         self.text_with_rank_support.text_len()
     }
-}
 
-#[cfg(feature = "savefile")]
-impl<I: IndexStorage, B: Block> FmIndex<I, B> {
+    #[cfg(feature = "savefile")]
     const VERSION_FOR_SAVEFILE: u32 = 0;
 
+    #[cfg(feature = "savefile")]
     pub fn load_from_reader(
         reader: &mut impl std::io::Read,
     ) -> Result<Self, savefile::SavefileError> {
         savefile::load(reader, Self::VERSION_FOR_SAVEFILE)
     }
 
+    #[cfg(feature = "savefile")]
     pub fn load_from_file(
         filepath: impl AsRef<std::path::Path>,
     ) -> Result<Self, savefile::SavefileError> {
         savefile::load_file(filepath, Self::VERSION_FOR_SAVEFILE)
     }
 
+    #[cfg(feature = "savefile")]
     pub fn save_to_writer(
         &self,
         writer: &mut impl std::io::Write,
@@ -243,6 +240,7 @@ impl<I: IndexStorage, B: Block> FmIndex<I, B> {
         savefile::save(writer, Self::VERSION_FOR_SAVEFILE, self)
     }
 
+    #[cfg(feature = "savefile")]
     pub fn save_to_file(
         &self,
         filepath: impl AsRef<std::path::Path>,

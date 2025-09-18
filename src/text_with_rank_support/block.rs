@@ -1,8 +1,10 @@
-use crate::maybe_savefile::MaybeSavefile;
+use crate::{maybe_savefile::MaybeSavefile, sealed};
+
+pub(crate) const BLOCK_OFFSET_BITS: usize = 16;
 
 // this distinction of block types only exists to be able to set repr(align(64)) for the 512 bit block
 
-/// The block used internally by data structures of this library.
+/// The block configurations used internally by data structures of this library.
 ///
 /// Currently, this can either be [`Block64`] or [`Block512`], with [`Block64`] being the default.
 ///
@@ -35,6 +37,12 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync + MaybeSavefile + '
 
     #[doc(hidden)]
     fn set_bit_assuming_zero(&mut self, idx: usize, bit: u8);
+
+    #[doc(hidden)]
+    fn integrate_block_offset_assuming_zero(&mut self, block_offset: u64);
+
+    #[doc(hidden)]
+    fn extract_block_offset_and_then_zeroize_it(&mut self) -> usize;
 }
 
 /// Larger blocks, recommended for alphabets with many dense symbols.
@@ -93,6 +101,19 @@ impl Block for Block512 {
 
         sum as usize
     }
+
+    fn integrate_block_offset_assuming_zero(&mut self, block_offset: u64) {
+        self.data[0] = block_offset;
+    }
+
+    fn extract_block_offset_and_then_zeroize_it(&mut self) -> usize {
+        let mask = !(u64::MAX << BLOCK_OFFSET_BITS);
+        let block_offset = self.data[0] & mask;
+
+        self.data[0] = self.data[0] & !mask;
+
+        block_offset as usize
+    }
 }
 
 /// Smaller blocks, recommended for alphabets with fewer dense symbols, like DNA alphabets.
@@ -133,6 +154,19 @@ impl Block for Block64 {
         let masked_data = self.data & !(u64::MAX << idx);
         masked_data.count_ones() as usize
     }
+
+    fn integrate_block_offset_assuming_zero(&mut self, block_offset: u64) {
+        self.data = block_offset;
+    }
+
+    fn extract_block_offset_and_then_zeroize_it(&mut self) -> usize {
+        let mask = !(u64::MAX << BLOCK_OFFSET_BITS);
+        let block_offset = self.data & mask;
+
+        self.data = self.data & !mask;
+
+        block_offset as usize
+    }
 }
 
 // the same as BLOCK64_MASKS, but with 512 bits
@@ -169,7 +203,3 @@ const BLOCK512_MASKS: [[u64; 8]; 512] = const {
 
     masks
 };
-
-mod sealed {
-    pub trait Sealed {}
-}

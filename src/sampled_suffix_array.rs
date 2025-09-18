@@ -3,7 +3,7 @@ use num_traits::{NumCast, PrimInt};
 
 use std::{collections::HashMap, marker::PhantomData, ops::Range};
 
-use crate::{IndexStorage, block::Block};
+use crate::{IndexStorage, text_with_rank_support::TextWithRankSupport};
 
 use super::FmIndex;
 
@@ -97,10 +97,10 @@ impl SampledSuffixArray<u32> {
 }
 
 impl<I: IndexStorage> SampledSuffixArray<I> {
-    pub(crate) fn recover_range<B: Block>(
+    pub(crate) fn recover_range<R: TextWithRankSupport<I>>(
         &self,
         range: Range<usize>,
-        index: &FmIndex<I, B>,
+        index: &FmIndex<I, R>,
     ) -> impl Iterator<Item = usize> {
         range.map(|mut i| {
             let mut num_steps_done = I::zero();

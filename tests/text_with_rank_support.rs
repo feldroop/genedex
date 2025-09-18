@@ -1,10 +1,6 @@
-use num_traits::PrimInt;
 use proptest::prelude::*;
 
-use genedex::{
-    TextWithRankSupport,
-    block::{Block, Block64, Block512},
-};
+use genedex::{IndexStorage, text_with_rank_support::*};
 
 type OccurrenceColumn<T> = Vec<T>;
 
@@ -47,11 +43,11 @@ fn create_occurrence_column(target_symbol: u8, bwt: &[u8]) -> Vec<usize> {
     column
 }
 
-fn test_against_naive<I: PrimInt + Send + Sync + 'static, B: Block + 'static>(
+fn test_against_naive<I: IndexStorage, R: TextWithRankSupport<I>>(
     text: &[u8],
     alphabet_size: usize,
 ) {
-    let text_rank = TextWithRankSupport::<I, B>::construct(text, alphabet_size);
+    let text_rank: R = TextWithRankSupport::construct(text, alphabet_size);
     let naive_text_rank = NaiveTextWithRankSupport::construct(text, alphabet_size);
 
     assert_eq!(text_rank.text_len(), text.len());
@@ -72,8 +68,10 @@ fn test_against_naive<I: PrimInt + Send + Sync + 'static, B: Block + 'static>(
 }
 
 fn test_different_block_sizes_against_naive(text: &[u8], alphabet_size: usize) {
-    test_against_naive::<i32, Block64>(text, alphabet_size);
-    test_against_naive::<i32, Block512>(text, alphabet_size);
+    test_against_naive::<i32, CondensedTextWithRankSupport<i32, Block64>>(text, alphabet_size);
+    test_against_naive::<u32, CondensedTextWithRankSupport<u32, Block512>>(text, alphabet_size);
+    test_against_naive::<i64, FlatTextWithRankSupport<i64, Block64>>(text, alphabet_size);
+    test_against_naive::<i32, FlatTextWithRankSupport<i32, Block512>>(text, alphabet_size);
 }
 
 #[test]

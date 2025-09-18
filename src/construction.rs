@@ -8,7 +8,6 @@ use crate::alphabet::Alphabet;
 use crate::config::PerformancePriority;
 use crate::sampled_suffix_array::SampledSuffixArray;
 use crate::text_id_search_tree::TexdIdSearchTree;
-use crate::text_with_rank_support::block::Block;
 use crate::{FmIndexConfig, TextWithRankSupport, maybe_savefile, sealed};
 
 /// Types that can be used to store indices inside the FM-Index.
@@ -56,10 +55,10 @@ pub trait IndexStorage:
     }
 
     #[doc(hidden)]
-    fn construct_sampled_suffix_array_and_bwt<B: Block>(
+    fn construct_sampled_suffix_array_and_bwt<R: TextWithRankSupport<Self>>(
         text: &[u8],
         frequency_table: &mut [Self::LibsaisOutput],
-        config: FmIndexConfig<Self, B>,
+        config: &FmIndexConfig<Self, R>,
         _alphabet: &Alphabet,
     ) -> (SampledSuffixArray<Self>, Vec<u8>) {
         let suffix_array_bytes = Self::construct_libsais_suffix_array(text, frequency_table);
@@ -98,10 +97,10 @@ impl IndexStorage for u32 {
     type LibsaisOutput = i64;
 
     #[cfg(feature = "u32-saca")]
-    fn construct_sampled_suffix_array_and_bwt<B: Block>(
+    fn construct_sampled_suffix_array_and_bwt<R: TextWithRankSupport<Self>>(
         text: &[u8],
         frequency_table: &mut [Self::LibsaisOutput],
-        config: FmIndexConfig<Self, B>,
+        config: &FmIndexConfig<Self, R>,
         alphabet: &Alphabet,
     ) -> (SampledSuffixArray<Self>, Vec<u8>) {
         match config.performance_priority {
@@ -164,18 +163,18 @@ impl IndexStorage for i64 {
     type LibsaisOutput = i64;
 }
 
-pub(crate) struct DataStructures<I, B> {
+pub(crate) struct DataStructures<I, R> {
     pub(crate) count: Vec<usize>,
     pub(crate) sampled_suffix_array: SampledSuffixArray<I>,
     pub(crate) text_ids: TexdIdSearchTree,
-    pub(crate) text_with_rank_support: TextWithRankSupport<I, B>,
+    pub(crate) text_with_rank_support: R,
 }
 
-pub(crate) fn create_data_structures<I: IndexStorage, B: Block, T: AsRef<[u8]>>(
+pub(crate) fn create_data_structures<I: IndexStorage, R: TextWithRankSupport<I>, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
-    config: FmIndexConfig<I, B>,
+    config: &FmIndexConfig<I, R>,
     alphabet: &Alphabet,
-) -> DataStructures<I, B> {
+) -> DataStructures<I, R> {
     let (text, mut frequency_table, sentinel_indices) =
         create_concatenated_densely_encoded_text(texts, alphabet);
 

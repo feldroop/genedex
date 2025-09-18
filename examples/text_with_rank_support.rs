@@ -1,4 +1,4 @@
-use genedex::TextWithRankSupport;
+use genedex::text_with_rank_support::{FlatTextWithRankSupport, TextWithRankSupport};
 
 fn main() {
     // This example shows how to directly use the TextWithRankSupport data structure that powers the FM-Index
@@ -6,7 +6,7 @@ fn main() {
     // the dense representation of symbols.
 
     let text = vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3];
-    let text_with_rank_support = TextWithRankSupport::<i32>::construct(&text, 4);
+    let text_with_rank_support = FlatTextWithRankSupport::<i32>::construct(&text, 4);
     drop(text);
 
     let idx = 4;

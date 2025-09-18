@@ -1,8 +1,8 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
-- interleave superblocks and blocks
-- compress text and/or bwt at some point during construction (half/half buffer)
-- make Block512 default again? (depends on benchmark results)
+- integrate alternative rank impl into codebase and benchmark, docs for it
+- NO further encoding experiments
+- try a little bit about doing multiple rank operations at the same time (to effectively parallelize memory loads)
 
 ### Index for single texts
 
@@ -14,6 +14,7 @@
 
 ### Nice to have, higher priority
 
+- compress text and/or bwt at some point during construction (half/half buffer)
 - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome)
     - maybe leverage the fact that such characters often occur in runs
 - paired blocks for improved memory usage when using larger alphabets

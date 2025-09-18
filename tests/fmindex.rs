@@ -1,6 +1,4 @@
-use genedex::{
-    FmIndex, FmIndexConfig, Hit, IndexStorage, PerformancePriority, alphabet, block::Block64,
-};
+use genedex::{FmIndex, FmIndexConfig, Hit, IndexStorage, PerformancePriority, alphabet};
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -229,7 +227,7 @@ fn naive_search(texts: &[Vec<u8>], query: &[u8]) -> HashSet<Hit> {
 }
 
 fn run_queries<I: IndexStorage>(
-    index: &FmIndex<I, Block64>,
+    index: &FmIndex<I>,
     existing_queries: &[(Hit, &[u8])],
     random_queries: &[Vec<u8>],
     random_queries_naive_hits: &[HashSet<Hit>],
