@@ -31,7 +31,7 @@ pub use flat::FlatTextWithRankSupport;
 /// An example of how this data structure is used can be found
 /// [here](https://github.com/feldroop/genedex/blob/master/examples/text_with_rank_support.rs).
 pub trait TextWithRankSupport<I: IndexStorage>:
-    sealed::Sealed + maybe_savefile::MaybeSavefile
+    sealed::Sealed + maybe_savefile::MaybeSavefile + 'static
 {
     /// Construct the data structure for the given text.
     ///
