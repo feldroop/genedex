@@ -127,14 +127,16 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
                 .get_unchecked(interleaved_blocks_start..interleaved_blocks_end)
         };
 
-        let mut accumulator_block = unsafe { *interleaved_blocks.get_unchecked(0) };
+        let (first_block, other_blocks) =
+            unsafe { interleaved_blocks.split_first().unwrap_unchecked() };
+
+        let mut accumulator_block = *first_block;
+
         if symbol & 1 == 0 {
             accumulator_block.negate();
         }
 
-        for i in 1..alphabet_num_bits {
-            let mut block = unsafe { *interleaved_blocks.get_unchecked(i) };
-
+        for mut block in other_blocks.iter().copied() {
             symbol >>= 1;
 
             if symbol & 1 == 0 {
