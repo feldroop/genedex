@@ -12,7 +12,6 @@ the FM-Index. The encoding attemps to provide a good trade-off between memory us
 A second, faster and less memory efficient encoding is also implemented in this library. Further benefits of `genedex` include:
 
 - Fast, parallel and memory efficient index construction by leveraging [`libsais-rs`] and [`rayon`].
-- Configurable, very low memory mode for index construction.
 - Support for indexing a set of texts, like chromosomes of a genome.
 - A flexible cursor API.
 - Fast reading and writing the FM-Index from/to files, using [`savefile`].

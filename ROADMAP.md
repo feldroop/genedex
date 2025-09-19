@@ -1,6 +1,5 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
-
 ### Index for single texts
 
 - more flexible alphabet API

@@ -284,7 +284,7 @@ fn proptest_fail() {
 }
 
 proptest! {
-    //#![proptest_config(ProptestConfig::with_failure_persistence(prop::test_runner::FileFailurePersistence::WithSource("proptest-regressions")))]
+    #![proptest_config(ProptestConfig::with_failure_persistence(prop::test_runner::FileFailurePersistence::WithSource("proptest-regressions")))]
 
     #[test]
     fn correctness_random_texts(
