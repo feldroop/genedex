@@ -1,6 +1,6 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
-### Index for single texts
+### Hopefully coming soon: index for single texts
 
 - more flexible alphabet API
     - allow alphabet with sentinel included in io representation
@@ -18,15 +18,18 @@
         the condensed text with rank support will get smaller and maybe faster. 
         A text sampled suffix array could be an option, or a "sparse" text with rank support substructure.
 - paired blocks for improved memory usage when using larger alphabets
-- suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
+- maybe a slow, super-low memory construction mode using the `sufr` crate (store suffix array in file)
+- experiment with batched search
+- mayeb type-erase index storage type and choose automatically for text size (does that work with savefile?)
 
-### Very useful functionality, is the goal to eventually support
+### Large topics, is the goal to eventually support
 
 - bidirectional FM-Index
 - searches with errors and "degenerate" chars in IUPAC fasta definition (using search schemes)
 
 ### Nice to have, but low priority
 
+- suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
 - gate rayon/OpenMP usage behind feature flag
 - optional functionality for text recovery
 - text sampled suffix array (optionally with text ids and other annotations)

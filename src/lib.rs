@@ -177,6 +177,8 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     /// Returns a cursor to the index with `query` currently searched.
     ///
     /// See [`Cursor`] for details. Running time is the same as for [`count`](Self::count).
+    /// This allows using a lookup table jump and therefore can be more efficient than creating
+    /// an empty cursor and repeatedly calling [`Cursor::extend_query_front`].
     pub fn cursor_for_query<'a>(&'a self, query: &[u8]) -> Cursor<'a, I, R> {
         let query_iter = query
             .iter()
