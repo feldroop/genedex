@@ -22,9 +22,9 @@ jobs:
     - name: Test
       run: cargo test --verbose
     - name: Clippy
-      run: cargo clippy --verbose
+      run: cargo clippy --verbose -- -Dwarnings
     - name: Documentation
-      run: cargo doc
+      run: cargo doc --no-deps --workspace
     - name: Examples
       run: |
         cargo run --example basic_usage
