@@ -29,7 +29,7 @@ sais_drum = { version = "0.1", optional = true }
 # would be nice to have behind a feature flag in the future (together with libsais OpenMP support)
 rayon = "1.11"
 
-savefile = { version = "0.20", optional = true, features = ["derive"] }
+savefile = { version = "0.20.1", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 proptest = "1.6.0"

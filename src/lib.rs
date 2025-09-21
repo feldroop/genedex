@@ -76,6 +76,7 @@ use text_with_rank_support::{
 ///
 /// See [crate-level documentation](self) for details.
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
+#[savefile_doc_hidden]
 pub struct FmIndex<I, R = CondensedTextWithRankSupport<I, Block64>> {
     alphabet: Alphabet,
     count: Vec<usize>,
@@ -94,7 +95,7 @@ pub type FmIndexCondensed512<I> = FmIndex<I, CondensedTextWithRankSupport<I, Blo
 /// The fastest version.
 pub type FmIndexFlat64<I> = FmIndex<I, FlatTextWithRankSupport<I, Block64>>;
 
-/// A little smaller and slower than [`FmIndexFlat64`]. Not recommended for most applications.
+/// A little smaller and slower than [`FmIndexFlat64`].
 pub type FmIndexFlat512<I> = FmIndex<I, FlatTextWithRankSupport<I, Block512>>;
 
 impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {

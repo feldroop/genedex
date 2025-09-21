@@ -1,14 +1,57 @@
+mod bwt;
+pub(crate) mod slice_compression;
+
 use bytemuck::Pod;
 use libsais::{OutputElement, ThreadCount};
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
-use std::collections::HashMap;
 
 use crate::alphabet::Alphabet;
 use crate::config::PerformancePriority;
+use crate::construction::slice_compression::{HalfBytesCompression, NoSliceCompression};
 use crate::sampled_suffix_array::SampledSuffixArray;
 use crate::text_id_search_tree::TexdIdSearchTree;
 use crate::{FmIndexConfig, TextWithRankSupport, maybe_savefile, sealed};
+
+pub(crate) struct DataStructures<I, R> {
+    pub(crate) count: Vec<usize>,
+    pub(crate) sampled_suffix_array: SampledSuffixArray<I>,
+    pub(crate) text_ids: TexdIdSearchTree,
+    pub(crate) text_with_rank_support: R,
+}
+
+pub(crate) fn create_data_structures<I: IndexStorage, R: TextWithRankSupport<I>, T: AsRef<[u8]>>(
+    texts: impl IntoIterator<Item = T>,
+    config: &FmIndexConfig<I, R>,
+    alphabet: &Alphabet,
+) -> DataStructures<I, R> {
+    let (mut text, mut frequency_table, sentinel_indices) =
+        create_concatenated_densely_encoded_text(texts, alphabet);
+
+    assert!(text.len() <= <usize as NumCast>::from(I::max_value()).unwrap());
+
+    let text_ids = TexdIdSearchTree::new_from_sentinel_indices(sentinel_indices);
+
+    let count = frequency_table_to_count(&frequency_table, alphabet.num_dense_symbols());
+
+    let mut maybe_bwt_buffer = Vec::new();
+
+    let (sampled_suffix_array, text_with_rank_support) =
+        I::construct_sampled_suffix_array_and_text_with_rank_support(
+            &mut text,
+            &mut maybe_bwt_buffer,
+            &mut frequency_table,
+            config,
+            alphabet,
+        );
+
+    DataStructures {
+        count,
+        sampled_suffix_array,
+        text_ids,
+        text_with_rank_support,
+    }
+}
 
 /// Types that can be used to store indices inside the FM-Index.
 ///
@@ -35,7 +78,7 @@ pub trait IndexStorage:
         let suffix_array_buffer: &mut [Self::LibsaisOutput] =
             bytemuck::cast_slice_mut(&mut suffix_array_bytes);
 
-        let mut construction = libsais::SuffixArrayConstruction::for_text(&text)
+        let mut construction = libsais::SuffixArrayConstruction::for_text(text)
             .in_borrowed_buffer(suffix_array_buffer)
             .multi_threaded(ThreadCount::fixed(
                 rayon::current_num_threads()
@@ -55,16 +98,26 @@ pub trait IndexStorage:
     }
 
     #[doc(hidden)]
-    fn construct_sampled_suffix_array_and_bwt<R: TextWithRankSupport<Self>>(
-        text: &[u8],
+    fn construct_sampled_suffix_array_and_text_with_rank_support<
+        'a,
+        R: TextWithRankSupport<Self>,
+    >(
+        text: &'a mut Vec<u8>,
+        maybe_bwt_buffer: &'a mut Vec<u8>,
         frequency_table: &mut [Self::LibsaisOutput],
         config: &FmIndexConfig<Self, R>,
-        _alphabet: &Alphabet,
-    ) -> (SampledSuffixArray<Self>, Vec<u8>) {
+        alphabet: &Alphabet,
+    ) -> (SampledSuffixArray<Self>, R) {
         let suffix_array_bytes = Self::construct_libsais_suffix_array(text, frequency_table);
         let suffix_array_buffer: &[Self::LibsaisOutput] = bytemuck::cast_slice(&suffix_array_bytes);
 
-        let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
+        let (bwt, text_border_lookup, uncompressed_text_len) = bwt::bwt_from_suffix_array(
+            suffix_array_buffer,
+            text,
+            maybe_bwt_buffer,
+            config.performance_priority,
+            alphabet,
+        );
 
         let sampled_suffix_array = Self::sample_suffix_array_maybe_u32_compressed(
             suffix_array_bytes,
@@ -72,7 +125,14 @@ pub trait IndexStorage:
             text_border_lookup,
         );
 
-        (sampled_suffix_array, bwt)
+        let text_with_rank_support = construct_text_with_rank_support_maybe_slice_compressed(
+            bwt,
+            uncompressed_text_len,
+            config.performance_priority,
+            alphabet,
+        );
+
+        (sampled_suffix_array, text_with_rank_support)
     }
 
     #[doc(hidden)]
@@ -97,20 +157,30 @@ impl IndexStorage for u32 {
     type LibsaisOutput = i64;
 
     #[cfg(feature = "u32-saca")]
-    fn construct_sampled_suffix_array_and_bwt<R: TextWithRankSupport<Self>>(
-        text: &[u8],
+    fn construct_sampled_suffix_array_and_text_with_rank_support<
+        'a,
+        R: TextWithRankSupport<Self>,
+    >(
+        text: &'a mut Vec<u8>,
+        maybe_bwt_buffer: &'a mut Vec<u8>,
         frequency_table: &mut [Self::LibsaisOutput],
         config: &FmIndexConfig<Self, R>,
         alphabet: &Alphabet,
-    ) -> (SampledSuffixArray<Self>, Vec<u8>) {
-        match config.performance_priority {
+    ) -> (SampledSuffixArray<Self>, R) {
+        let (sampled_suffix_array, bwt, uncompressed_text_len) = match config.performance_priority {
             PerformancePriority::HighSpeed | PerformancePriority::Balanced => {
                 let suffix_array_bytes =
                     Self::construct_libsais_suffix_array(text, frequency_table);
                 let suffix_array_buffer: &[Self::LibsaisOutput] =
                     bytemuck::cast_slice(&suffix_array_bytes);
 
-                let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
+                let (bwt, text_border_lookup, uncompressed_text_len) = bwt::bwt_from_suffix_array(
+                    suffix_array_buffer,
+                    text,
+                    maybe_bwt_buffer,
+                    config.performance_priority,
+                    alphabet,
+                );
 
                 let sampled_suffix_array = Self::sample_suffix_array_maybe_u32_compressed(
                     suffix_array_bytes,
@@ -118,7 +188,7 @@ impl IndexStorage for u32 {
                     text_border_lookup,
                 );
 
-                (sampled_suffix_array, bwt)
+                (sampled_suffix_array, bwt, uncompressed_text_len)
             }
             PerformancePriority::LowMemory => {
                 let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<Self>()];
@@ -129,7 +199,13 @@ impl IndexStorage for u32 {
                     .with_max_char((alphabet.num_dense_symbols() - 1) as u8)
                     .construct_suffix_array_inplace(text, suffix_array_buffer);
 
-                let (bwt, text_border_lookup) = bwt_from_suffix_array(suffix_array_buffer, &text);
+                let (bwt, text_border_lookup, uncompressed_text_len) = bwt::bwt_from_suffix_array(
+                    suffix_array_buffer,
+                    text,
+                    maybe_bwt_buffer,
+                    config.performance_priority,
+                    alphabet,
+                );
 
                 // NOT call Self::sample_suffix_array_maybe_u32_compressed, because after using u32 sais-drum
                 // the suffix array does not need ot be compressed
@@ -139,9 +215,18 @@ impl IndexStorage for u32 {
                     text_border_lookup,
                 );
 
-                (sampled_suffix_array, bwt)
+                (sampled_suffix_array, bwt, uncompressed_text_len)
             }
-        }
+        };
+
+        let text_with_rank_support = construct_text_with_rank_support_maybe_slice_compressed(
+            bwt,
+            uncompressed_text_len,
+            config.performance_priority,
+            alphabet,
+        );
+
+        (sampled_suffix_array, text_with_rank_support)
     }
 
     fn sample_suffix_array_maybe_u32_compressed(
@@ -163,41 +248,7 @@ impl IndexStorage for i64 {
     type LibsaisOutput = i64;
 }
 
-pub(crate) struct DataStructures<I, R> {
-    pub(crate) count: Vec<usize>,
-    pub(crate) sampled_suffix_array: SampledSuffixArray<I>,
-    pub(crate) text_ids: TexdIdSearchTree,
-    pub(crate) text_with_rank_support: R,
-}
-
-pub(crate) fn create_data_structures<I: IndexStorage, R: TextWithRankSupport<I>, T: AsRef<[u8]>>(
-    texts: impl IntoIterator<Item = T>,
-    config: &FmIndexConfig<I, R>,
-    alphabet: &Alphabet,
-) -> DataStructures<I, R> {
-    let (text, mut frequency_table, sentinel_indices) =
-        create_concatenated_densely_encoded_text(texts, alphabet);
-
-    assert!(text.len() <= <usize as NumCast>::from(I::max_value()).unwrap());
-
-    let text_ids = TexdIdSearchTree::new_from_sentinel_indices(sentinel_indices);
-
-    let count = frequency_table_to_count(&frequency_table, alphabet.num_dense_symbols());
-
-    let (sampled_suffix_array, bwt) =
-        I::construct_sampled_suffix_array_and_bwt(&text, &mut frequency_table, config, alphabet);
-
-    let text_with_rank_support = TextWithRankSupport::construct(&bwt, alphabet.num_dense_symbols());
-
-    DataStructures {
-        count,
-        sampled_suffix_array,
-        text_ids,
-        text_with_rank_support,
-    }
-}
-
-fn create_concatenated_densely_encoded_text<I: OutputElement, T: AsRef<[u8]>>(
+pub(crate) fn create_concatenated_densely_encoded_text<I: OutputElement, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
     alphabet: &Alphabet,
 ) -> (Vec<u8>, Vec<I>, Vec<usize>) {
@@ -217,7 +268,11 @@ fn create_concatenated_densely_encoded_text<I: OutputElement, T: AsRef<[u8]>>(
         })
         .collect();
 
-    let mut concatenated_text = vec![0; needed_capacity];
+    // add one extra capacity to make sure that there does not need to be reallocation when on byte is added to the
+    // text to make its size even for the slice compression in the lower memory mode for small alphabets
+    let mut concatenated_text = vec![0; needed_capacity + 1];
+    concatenated_text.pop();
+
     let mut concatenated_text_splits = Vec::with_capacity(num_texts);
     let mut remaining_slice = concatenated_text.as_mut_slice();
 
@@ -276,70 +331,35 @@ fn frequency_table_to_count<I: OutputElement>(
     count
 }
 
-// I2: current_suffix array indices, I2: IndexStorage we want to use for the FM-Index
-fn bwt_from_suffix_array<I1: IndexStorage, I2: IndexStorage>(
-    suffix_array: &[I1],
-    text: &[u8],
-) -> (Vec<u8>, HashMap<usize, I2>) {
-    let mut bwt = vec![0; text.len()];
-
-    // collecting the text border lookup values while constructing the BWT made the function
-    // run much slower. this two-level chunk scheme leads to the same performance as before
-    let outer_chunk_size = text.len().div_ceil(rayon::current_num_threads() * 4);
-    let inner_chunk_size = 128;
-
-    let text_border_lookup = suffix_array
-        .par_chunks(outer_chunk_size)
-        .zip(bwt.par_chunks_mut(outer_chunk_size))
-        .enumerate()
-        .map(
-            |(outer_chunk_index, (outer_suffix_array_chunk, outer_bwt_chunk))| {
-                let mut text_border_lookup = HashMap::new();
-
-                for (inner_chunk_index, (inner_suffix_array_chunk, inner_bwt_chunk)) in
-                    outer_suffix_array_chunk
-                        .chunks(inner_chunk_size)
-                        .zip(outer_bwt_chunk.chunks_mut(inner_chunk_size))
-                        .enumerate()
-                {
-                    for (&text_index, bwt_entry) in inner_suffix_array_chunk
-                        .iter()
-                        .zip(inner_bwt_chunk.iter_mut())
-                    {
-                        let text_index_usize = <usize as NumCast>::from(text_index).unwrap();
-
-                        let text_index_usize = if text_index_usize > 0 {
-                            text_index_usize
-                        } else {
-                            text.len()
-                        };
-
-                        *bwt_entry = text[text_index_usize - 1];
-                    }
-
-                    for i in memchr::memchr_iter(0, inner_bwt_chunk) {
-                        let suffix_array_index = outer_chunk_size * outer_chunk_index
-                            + inner_chunk_size * inner_chunk_index
-                            + i;
-
-                        let text_index =
-                            <I2 as NumCast>::from(inner_suffix_array_chunk[i]).unwrap();
-                        text_border_lookup.insert(suffix_array_index, text_index);
-                    }
-                }
-
-                text_border_lookup
-            },
+fn construct_text_with_rank_support_maybe_slice_compressed<
+    I: IndexStorage,
+    R: TextWithRankSupport<I>,
+>(
+    bwt: &[u8],
+    uncompressed_bwt_len: usize,
+    performance_priority: PerformancePriority,
+    alphabet: &Alphabet,
+) -> R {
+    if should_not_use_slice_compression(performance_priority, alphabet) {
+        R::construct_from_maybe_slice_compressed_text::<NoSliceCompression>(
+            bwt,
+            uncompressed_bwt_len,
+            alphabet.num_dense_symbols(),
         )
-        .reduce_with(|mut m0, m1| {
-            for (key, value) in m1.into_iter() {
-                m0.insert(key, value);
-            }
-            m0
-        })
-        .unwrap_or_default();
+    } else {
+        R::construct_from_maybe_slice_compressed_text::<HalfBytesCompression>(
+            bwt,
+            uncompressed_bwt_len,
+            alphabet.num_dense_symbols(),
+        )
+    }
+}
 
-    (bwt, text_border_lookup)
+fn should_not_use_slice_compression(
+    performance_priority: PerformancePriority,
+    alphabet: &Alphabet,
+) -> bool {
+    performance_priority == PerformancePriority::HighSpeed || alphabet.num_dense_symbols() > 16
 }
 
 #[cfg(test)]

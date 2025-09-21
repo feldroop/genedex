@@ -135,6 +135,8 @@ prop_compose! {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_failure_persistence(prop::test_runner::FileFailurePersistence::WithSource("proptest-regressions")))]
+
     #[test]
     fn correctness_random_texts((text, alphabet_size) in text_over_alphabet()) {
         test_different_block_sizes_against_naive(&text, alphabet_size);

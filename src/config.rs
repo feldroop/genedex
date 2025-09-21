@@ -85,7 +85,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> Default for FmIndexConfig<I, R>
 /// construction of the FM-Index.
 ///
 /// The default is [`HighSpeed`](PerformancePriority::HighSpeed).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PerformancePriority {
     HighSpeed,
     /// This is currently equivalent to `HighSpeed`, but that will change in the future.

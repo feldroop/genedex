@@ -1,4 +1,7 @@
-use crate::{IndexStorage, TextWithRankSupport, maybe_savefile::MaybeSavefile, sealed::Sealed};
+use crate::{
+    IndexStorage, TextWithRankSupport, construction::slice_compression::SliceCompression,
+    maybe_savefile::MaybeSavefile, sealed::Sealed,
+};
 
 use super::block::{Block, Block64};
 
@@ -12,7 +15,8 @@ use rayon::prelude::*;
 
 /// The more memory-efficient implementation of [`TextWithRankSupport`].
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[derive(Debug)]
+#[savefile_doc_hidden]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CondensedTextWithRankSupport<I, B = Block64> {
     text_len: usize,
     alphabet_size: usize,
@@ -25,12 +29,20 @@ impl<I: IndexStorage, B: Block> MaybeSavefile for CondensedTextWithRankSupport<I
 
 impl<I: IndexStorage, B: Block> Sealed for CondensedTextWithRankSupport<I, B> {}
 
-impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRankSupport<I, B> {
-    fn construct(text: &[u8], alphabet_size: usize) -> Self {
+impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
+    for CondensedTextWithRankSupport<I, B>
+{
+    fn construct_from_maybe_slice_compressed_text<S: SliceCompression>(
+        text: &[u8],
+        uncompressed_text_len: usize,
+        alphabet_size: usize,
+    ) -> Self {
         assert!(alphabet_size >= 2);
 
         let alphabet_num_bits = ilog2_ceil_for_nonzero(alphabet_size);
-        let len: usize = text.len() + 1;
+
+        // we might be storing one character b'1' to many if the text is half byte compressed and had odd length.
+        let len: usize = S::transformed_slice_len(text) + 1;
         let superblock_size = u16::MAX as usize + 1;
 
         let num_indicator_blocks = len.div_ceil(B::NUM_BITS) * alphabet_num_bits;
@@ -51,7 +63,8 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
 
         let superblock_offsets_iter = interleaved_superblock_offsets.par_chunks_mut(alphabet_size);
 
-        let text_superblock_iter = text.par_chunks(superblock_size);
+        let text_chunk_size = S::transform_chunk_size(superblock_size);
+        let text_superblock_iter = text.par_chunks(text_chunk_size);
 
         let interleaved_superblock_iter = (
             text_superblock_iter,
@@ -62,7 +75,7 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
             .into_par_iter();
 
         interleaved_superblock_iter
-            .for_each(|tup| fill_superblock::<I, B>(tup.0, tup.1, tup.2, tup.3, alphabet_size));
+            .for_each(|tup| fill_superblock::<I, B, S>(tup.0, tup.1, tup.2, tup.3, alphabet_size));
 
         // accumulate superblocks in single thread
         let mut temp_offsets = vec![I::zero(); alphabet_size];
@@ -78,14 +91,16 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
         }
 
         Self {
-            text_len: text.len(),
+            text_len: uncompressed_text_len,
             alphabet_size,
             interleaved_blocks,
             interleaved_block_offsets,
             interleaved_superblock_offsets,
         }
     }
+}
 
+impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRankSupport<I, B> {
     fn rank(&self, symbol: u8, idx: usize) -> usize {
         assert!((symbol as usize) < self.alphabet_size && idx <= self.text_len);
         unsafe { self.rank_unchecked(symbol, idx) }
@@ -153,6 +168,8 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
     }
 
     fn symbol_at(&self, idx: usize) -> u8 {
+        assert!(idx < self.text_len);
+
         let alphabet_num_bits = ilog2_ceil_for_nonzero(self.alphabet_size);
         let blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
         let blocks_end = blocks_start + alphabet_num_bits;
@@ -180,7 +197,7 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
     }
 }
 
-fn fill_superblock<I: PrimInt, B: Block>(
+fn fill_superblock<I: PrimInt, B: Block, S: SliceCompression>(
     text: &[u8],
     interleaved_superblock_offsets: &mut [I],
     interleaved_block_offsets: &mut [u16],
@@ -190,7 +207,8 @@ fn fill_superblock<I: PrimInt, B: Block>(
     let alphabet_num_bits = ilog2_ceil_for_nonzero(alphabet_size);
     let mut block_offsets_sum = vec![0; alphabet_size];
 
-    let text_block_iter = text.chunks(B::NUM_BITS);
+    let text_chunk_size = S::transform_chunk_size(B::NUM_BITS);
+    let text_block_iter = text.chunks(text_chunk_size);
     let block_offsets_iter = interleaved_block_offsets.chunks_mut(alphabet_size);
     let blocks_iter = interleaved_blocks.chunks_mut(alphabet_num_bits);
 
@@ -201,7 +219,7 @@ fn fill_superblock<I: PrimInt, B: Block>(
     for ((text_block, block_offsets), blocks) in block_package_iter {
         block_offsets.copy_from_slice(&block_offsets_sum);
 
-        for (index_in_block, mut symbol) in text_block.iter().copied().enumerate() {
+        for (index_in_block, mut symbol) in S::iter(text_block).enumerate() {
             let symbol_usize = <usize as NumCast>::from(symbol).unwrap();
 
             let superblock_count = &mut interleaved_superblock_offsets[symbol_usize];

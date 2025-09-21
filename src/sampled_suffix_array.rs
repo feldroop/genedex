@@ -8,6 +8,7 @@ use crate::{IndexStorage, text_with_rank_support::TextWithRankSupport};
 use super::FmIndex;
 
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
+#[savefile_doc_hidden]
 pub struct SampledSuffixArray<I> {
     suffix_array_bytes: Vec<u8>,
     text_border_lookup: HashMap<usize, I>,

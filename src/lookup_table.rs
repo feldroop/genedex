@@ -41,7 +41,7 @@ pub(crate) fn fill_lookup_tables<I: IndexStorage, R: TextWithRankSupport<I>>(
         index
             .lookup_tables
             .tables
-            .push(LookupTable::new(depth, num_symbols, &index));
+            .push(LookupTable::new(depth, num_symbols, index));
     }
 }
 

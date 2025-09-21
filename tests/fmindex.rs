@@ -208,7 +208,7 @@ fn naive_search(texts: &[Vec<u8>], query: &[u8]) -> HashSet<Hit> {
     let mut hits = HashSet::new();
 
     for (text_id, text) in texts.iter().enumerate() {
-        if query.len() == 0 {
+        if query.is_empty() {
             for position in 0..=text.len() {
                 hits.insert(Hit { text_id, position });
             }
@@ -234,7 +234,7 @@ fn run_queries<I: IndexStorage>(
 ) {
     for (hit, query) in existing_queries {
         let results: HashSet<_> = index.locate(query).collect();
-        assert!(results.contains(&hit));
+        assert!(results.contains(hit));
     }
 
     for (query, naive_results) in random_queries.iter().zip(random_queries_naive_hits) {
@@ -247,7 +247,6 @@ fn run_queries<I: IndexStorage>(
 #[test]
 fn proptest_fail() {
     let texts = vec![vec![71, 65]];
-    // [3, 1, 0]
 
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -284,7 +283,12 @@ fn proptest_fail() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_failure_persistence(prop::test_runner::FileFailurePersistence::WithSource("proptest-regressions")))]
+    // default is 256 and I'd like some more test cases that need to pass
+    #![proptest_config(ProptestConfig {
+        cases: 2048,
+        failure_persistence: Some(Box::new(prop::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
+        ..Default::default()
+    })]
 
     #[test]
     fn correctness_random_texts(
@@ -298,6 +302,8 @@ proptest! {
         performance_priority in (0usize..3).prop_map(|i| [PerformancePriority::Balanced, PerformancePriority::HighSpeed, PerformancePriority::LowMemory][i]),
         seed in any::<u64>(),
     ) {
+        std::fs::write("debug.txt", format!("{seed} {suffix_array_sampling_rate} {lookup_table_depth} {texts:?}")).unwrap();
+
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads as usize)
             .build()

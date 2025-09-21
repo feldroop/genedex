@@ -1,6 +1,6 @@
 use crate::{maybe_savefile::MaybeSavefile, sealed};
 
-pub(crate) const BLOCK_OFFSET_BITS: usize = 16;
+pub(crate) const NUM_BLOCK_OFFSET_BITS: usize = 16;
 
 // this distinction of block types only exists to be able to set repr(align(64)) for the 512 bit block
 
@@ -12,7 +12,9 @@ pub(crate) const BLOCK_OFFSET_BITS: usize = 16;
 /// The difference in memory usage depends on the number of dense symbols of the alphabet used.
 /// For small alphabets like DNA alphabets, the difference in memory usage is almost irrelevant, so
 /// [`Block64`] is recommended.
-pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync + MaybeSavefile + 'static {
+pub trait Block:
+    sealed::Sealed + std::fmt::Debug + Clone + Copy + Send + Sync + MaybeSavefile + 'static
+{
     #[doc(hidden)]
     const NUM_BITS: usize;
     #[doc(hidden)]
@@ -47,6 +49,7 @@ pub trait Block: sealed::Sealed + Clone + Copy + Send + Sync + MaybeSavefile + '
 
 /// Larger blocks, recommended for alphabets with many dense symbols.
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
+#[savefile_doc_hidden]
 #[derive(Debug, Clone, Copy)]
 #[repr(align(64))]
 pub struct Block512 {
@@ -95,8 +98,8 @@ impl Block for Block512 {
 
         let mask = BLOCK512_MASKS[idx];
 
-        for i in 0..8 {
-            sum += (self.data[i] & mask[i]).count_ones();
+        for (data_part, mask_part) in self.data.iter().zip(mask) {
+            sum += (data_part & mask_part).count_ones();
         }
 
         sum as usize
@@ -107,10 +110,10 @@ impl Block for Block512 {
     }
 
     fn extract_block_offset_and_then_zeroize_it(&mut self) -> usize {
-        let mask = !(u64::MAX << BLOCK_OFFSET_BITS);
+        let mask = !(u64::MAX << NUM_BLOCK_OFFSET_BITS);
         let block_offset = self.data[0] & mask;
 
-        self.data[0] = self.data[0] & !mask;
+        self.data[0] &= !mask;
 
         block_offset as usize
     }
@@ -118,6 +121,7 @@ impl Block for Block512 {
 
 /// Smaller blocks, recommended for alphabets with fewer dense symbols, like DNA alphabets.
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
+#[savefile_doc_hidden]
 #[derive(Debug, Clone, Copy)]
 pub struct Block64 {
     data: u64,
@@ -139,7 +143,7 @@ impl Block for Block64 {
     }
 
     fn set_to_self_and(&mut self, other: Self) {
-        self.data = self.data & other.data;
+        self.data &= other.data;
     }
 
     fn get_bit(&self, idx: usize) -> u8 {
@@ -160,17 +164,17 @@ impl Block for Block64 {
     }
 
     fn extract_block_offset_and_then_zeroize_it(&mut self) -> usize {
-        let mask = !(u64::MAX << BLOCK_OFFSET_BITS);
+        let mask = !(u64::MAX << NUM_BLOCK_OFFSET_BITS);
         let block_offset = self.data & mask;
 
-        self.data = self.data & !mask;
+        self.data &= !mask;
 
         block_offset as usize
     }
 }
 
 // the same as BLOCK64_MASKS, but with 512 bits
-const BLOCK512_MASKS: [[u64; 8]; 512] = const {
+static BLOCK512_MASKS: [[u64; 8]; 512] = const {
     let mut masks = [[0; 8]; 512];
 
     let mut block64_idx = 0;
