@@ -25,6 +25,8 @@ jobs:
       run: cargo clippy --verbose -- -Dwarnings
     - name: Documentation
       run: cargo doc --no-deps --workspace
+    - name: Format
+      run: cargo fmt --all -- --check
     - name: Examples
       run: |
         cargo run --example basic_usage
