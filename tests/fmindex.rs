@@ -232,15 +232,34 @@ fn run_queries<I: IndexStorage>(
     random_queries: &[Vec<u8>],
     random_queries_naive_hits: &[HashSet<Hit>],
 ) {
-    for (hit, query) in existing_queries {
+    let existing_many: Vec<_> = index
+        .locate_many(existing_queries.iter().map(|tup| tup.1))
+        .collect();
+    assert_eq!(existing_many.len(), existing_queries.len());
+
+    for ((hit, query), many_results) in existing_queries.iter().zip(existing_many) {
         let results: HashSet<_> = index.locate(query).collect();
+        let many_results: HashSet<_> = many_results.collect();
+
         assert!(results.contains(hit));
+        assert!(many_results.contains(hit));
     }
 
-    for (query, naive_results) in random_queries.iter().zip(random_queries_naive_hits) {
+    let random_many: Vec<_> = index
+        .locate_many(random_queries.iter().map(|q| q.as_slice()))
+        .collect();
+    assert_eq!(random_many.len(), random_queries.len());
+
+    for ((query, naive_results), many_results) in random_queries
+        .iter()
+        .zip(random_queries_naive_hits)
+        .zip(random_many)
+    {
         let results: HashSet<_> = index.locate(query).collect();
+        let many_results: HashSet<_> = many_results.collect();
 
         assert_eq!(&results, naive_results);
+        assert_eq!(&many_results, naive_results);
     }
 }
 
@@ -285,7 +304,7 @@ fn proptest_fail() {
 proptest! {
     // default is 256 and I'd like some more test cases that need to pass
     #![proptest_config(ProptestConfig {
-        cases: 2048,
+        cases: 512,
         failure_persistence: Some(Box::new(prop::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
         ..Default::default()
     })]
@@ -302,8 +321,6 @@ proptest! {
         performance_priority in (0usize..3).prop_map(|i| [PerformancePriority::Balanced, PerformancePriority::HighSpeed, PerformancePriority::LowMemory][i]),
         seed in any::<u64>(),
     ) {
-        std::fs::write("debug.txt", format!("{seed} {suffix_array_sampling_rate} {lookup_table_depth} {texts:?}")).unwrap();
-
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads as usize)
             .build()

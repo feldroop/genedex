@@ -1,6 +1,6 @@
 // static binary search tree, heap-like memory layout in flat array
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct TexdIdSearchTree {
     nodes: Vec<Node>,
     pub(crate) sentinel_indices: Vec<usize>,

@@ -13,11 +13,19 @@ use crate::{
 ///
 /// An example of using the cursor API can be found
 /// [here](https://github.com/feldroop/genedex/blob/master/examples/cursor.rs).
-#[derive(Clone, Copy)]
 pub struct Cursor<'a, I, R> {
     pub(crate) index: &'a FmIndex<I, R>,
     pub(crate) interval: HalfOpenInterval,
 }
+
+// the derive is too restrictive
+impl<'a, I, R> Clone for Cursor<'a, I, R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, I, R> Copy for Cursor<'a, I, R> {}
 
 impl<'a, I: IndexStorage, R: TextWithRankSupport<I>> Cursor<'a, I, R> {
     /// Extends the currently searched query at the front by one symbol.

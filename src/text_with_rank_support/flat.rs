@@ -100,11 +100,13 @@ impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
 }
 
 impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for FlatTextWithRankSupport<I, B> {
+    #[inline(always)]
     fn rank(&self, symbol: u8, idx: usize) -> usize {
         assert!((symbol as usize) < self.alphabet_size && idx <= self.text_len);
         unsafe { self.rank_unchecked(symbol, idx) }
     }
 
+    #[inline(always)]
     unsafe fn rank_unchecked(&self, symbol: u8, idx: usize) -> usize {
         // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
         // and since the alphabet has a size of at least 2

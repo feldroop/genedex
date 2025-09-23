@@ -44,6 +44,7 @@ pub mod alphabet;
 /// Different implementations of the text with rank support (a.k.a. occurrence table) data structure that powers the FM-Index.
 pub mod text_with_rank_support;
 
+mod batch_computed_cursors;
 mod config;
 mod construction;
 mod cursor;
@@ -64,6 +65,7 @@ pub use construction::IndexStorage;
 #[doc(inline)]
 pub use cursor::Cursor;
 
+use batch_computed_cursors::BatchComputedCursors;
 use construction::DataStructures;
 use lookup_table::LookupTables;
 use sampled_suffix_array::SampledSuffixArray;
@@ -77,6 +79,7 @@ use text_with_rank_support::{
 /// See [crate-level documentation](self) for details.
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[savefile_doc_hidden]
+#[derive(Clone)]
 pub struct FmIndex<I, R = CondensedTextWithRankSupport<I, Block64>> {
     alphabet: Alphabet,
     count: Vec<usize>,
@@ -95,7 +98,7 @@ pub type FmIndexCondensed512<I> = FmIndex<I, CondensedTextWithRankSupport<I, Blo
 /// The fastest version.
 pub type FmIndexFlat64<I> = FmIndex<I, FlatTextWithRankSupport<I, Block64>>;
 
-/// A little smaller and slower than [`FmIndexFlat64`].
+/// A little smaller and slower than [`FmIndexFlat64`]. [`FmIndexCondensed64`] should be a better trade-off for most applications.
 pub type FmIndexFlat512<I> = FmIndex<I, FlatTextWithRankSupport<I, Block512>>;
 
 impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
@@ -150,6 +153,22 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         self.locate_interval(cursor.interval())
     }
 
+    pub fn count_many<'a>(
+        &'a self,
+        queries: impl IntoIterator<Item = &'a [u8]> + 'a,
+    ) -> impl Iterator<Item = usize> {
+        BatchComputedCursors::<I, R, _, 16>::new(self, queries.into_iter())
+            .map(|cursor| cursor.count())
+    }
+
+    pub fn locate_many<'a>(
+        &'a self,
+        queries: impl IntoIterator<Item = &'a [u8]> + 'a,
+    ) -> impl Iterator<Item: Iterator<Item = Hit>> {
+        BatchComputedCursors::<I, R, _, 16>::new(self, queries.into_iter())
+            .map(|cursor| self.locate_interval(cursor.interval()))
+    }
+
     fn locate_interval(&self, interval: HalfOpenInterval) -> impl Iterator<Item = Hit> {
         self.suffix_array
             .recover_range(interval.start..interval.end, self)
@@ -181,11 +200,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     /// This allows using a lookup table jump and therefore can be more efficient than creating
     /// an empty cursor and repeatedly calling [`Cursor::extend_query_front`].
     pub fn cursor_for_query<'a>(&'a self, query: &[u8]) -> Cursor<'a, I, R> {
-        let query_iter = query
-            .iter()
-            .rev()
-            .map(|&s| self.alphabet.io_to_dense_representation(s));
-
+        let query_iter = self.get_query_iter(query);
         self.cursor_for_iter_without_alphabet_translation(query_iter)
     }
 
@@ -197,13 +212,11 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         Q: ExactSizeIterator<Item = u8>,
     {
         let mut query_iter = query.into_iter();
-
-        let lookup_depth = std::cmp::min(query_iter.len(), self.lookup_tables.max_depth());
-        let (start, end) = self.lookup_tables.lookup(&mut query_iter, lookup_depth);
+        let interval = self.initial_lookup_table_jump(&mut query_iter);
 
         let mut cursor = Cursor {
             index: self,
-            interval: HalfOpenInterval { start, end },
+            interval,
         };
 
         for symbol in query_iter {
@@ -217,6 +230,22 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         cursor
     }
 
+    fn get_query_iter(&self, query: &[u8]) -> impl ExactSizeIterator<Item = u8> {
+        query
+            .iter()
+            .rev()
+            .map(|&s| self.alphabet.io_to_dense_representation(s))
+    }
+
+    fn initial_lookup_table_jump(
+        &self,
+        query_iter: &mut impl ExactSizeIterator<Item = u8>,
+    ) -> HalfOpenInterval {
+        let lookup_depth = std::cmp::min(query_iter.len(), self.lookup_tables.max_depth());
+        self.lookup_tables.lookup(query_iter, lookup_depth)
+    }
+
+    #[inline(always)]
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
         self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
     }

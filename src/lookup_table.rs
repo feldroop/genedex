@@ -1,9 +1,9 @@
 use num_traits::NumCast;
 
-use crate::{FmIndex, IndexStorage, text_with_rank_support::TextWithRankSupport};
+use crate::{FmIndex, HalfOpenInterval, IndexStorage, text_with_rank_support::TextWithRankSupport};
 
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct LookupTables<I> {
     num_symbols: usize,
     tables: Vec<LookupTable<I>>,
@@ -17,11 +17,46 @@ impl<I: IndexStorage> LookupTables<I> {
         }
     }
 
-    pub(crate) fn lookup<Q>(&self, query_iter: &mut Q, depth: usize) -> (usize, usize)
+    pub(crate) fn lookup<Q>(&self, query_iter: &mut Q, depth: usize) -> HalfOpenInterval
     where
         Q: Iterator<Item = u8>,
     {
-        self.tables[depth].lookup(query_iter, self.num_symbols)
+        let idx = self.compute_lookup_idx(query_iter, depth);
+        self.lookup_idx(depth, idx)
+    }
+
+    pub(crate) fn lookup_idx(&self, depth: usize, idx: usize) -> HalfOpenInterval {
+        self.tables[depth].lookup(idx)
+    }
+
+    // gives false positive error for now
+    #[rust_analyzer::skip]
+    pub(crate) fn lookup_idx_many(
+        &self,
+        depths: &[usize],
+        idxs: &[usize],
+        outs: &mut [HalfOpenInterval],
+    ) {
+        for ((&depth, &idx), out) in depths.iter().zip(idxs).zip(outs) {
+            *out = self.lookup_idx(depth, idx);
+        }
+    }
+
+    pub(crate) fn compute_lookup_idx<Q>(&self, query_iter: &mut Q, depth: usize) -> usize
+    where
+        Q: Iterator<Item = u8>,
+    {
+        let mut idx = 0;
+        let mut exponent = depth.saturating_sub(1);
+
+        for symbol in query_iter.take(depth) {
+            // subtract one, because the sentinel is not stored in the table
+            let symbol = symbol - 1;
+            idx += symbol as usize * self.num_symbols.pow(exponent as u32);
+            exponent = exponent.saturating_sub(1);
+        }
+
+        idx
     }
 
     pub(crate) fn max_depth(&self) -> usize {
@@ -46,7 +81,7 @@ pub(crate) fn fill_lookup_tables<I: IndexStorage, R: TextWithRankSupport<I>>(
 }
 
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct LookupTable<I> {
     data: Vec<(I, I)>,
     depth: usize,
@@ -76,26 +111,13 @@ impl<I: IndexStorage> LookupTable<I> {
     }
 
     // direction should already be resolved by the iterator
-    fn lookup<Q>(&self, query_iter: &mut Q, num_symbols: usize) -> (usize, usize)
-    where
-        Q: Iterator<Item = u8>,
-    {
-        let mut idx = 0;
-        let mut exponent = self.depth.saturating_sub(1);
-
-        for symbol in query_iter.take(self.depth) {
-            // subtract one, because the sentinel is not stored in the table
-            let symbol = symbol - 1;
-            idx += symbol as usize * num_symbols.pow(exponent as u32);
-            exponent = exponent.saturating_sub(1);
-        }
-
+    fn lookup(&self, idx: usize) -> HalfOpenInterval {
         let (start, end) = self.data[idx];
 
-        (
-            <usize as NumCast>::from(start).unwrap(),
-            <usize as NumCast>::from(end).unwrap(),
-        )
+        HalfOpenInterval {
+            start: <usize as NumCast>::from(start).unwrap(),
+            end: <usize as NumCast>::from(end).unwrap(),
+        }
     }
 }
 
