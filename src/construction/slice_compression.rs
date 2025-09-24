@@ -46,7 +46,7 @@ impl SliceCompression for HalfBytesCompression {
     fn get(idx: usize, slice: &[u8]) -> u8 {
         let byte = slice[idx / 2];
 
-        if idx % 2 == 0 {
+        if idx.is_multiple_of(2) {
             unpack_from_left_half_of_byte(byte)
         } else {
             unpack_from_right_half_of_byte(byte)
@@ -56,7 +56,7 @@ impl SliceCompression for HalfBytesCompression {
     fn set(idx: usize, slice: &mut [u8], value: u8) {
         let byte = &mut slice[idx / 2];
 
-        if idx % 2 == 0 {
+        if idx.is_multiple_of(2) {
             pack_into_left_half_of_byte(byte, value);
         } else {
             pack_into_right_half_of_byte(byte, value);
