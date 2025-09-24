@@ -94,17 +94,13 @@ impl Block for Block512 {
     }
 
     fn count_ones_before(&self, idx: usize) -> usize {
-        let store_idx = idx / 64;
-        let idx_in_store = idx % 64;
-
         let mut sum = 0;
 
-        for &data_part in &self.data[..store_idx] {
-            sum += data_part.count_ones();
-        }
+        let mask = BLOCK512_MASKS[idx];
 
-        let masked_data_part = self.data[store_idx] & !(u64::MAX << idx_in_store);
-        sum += masked_data_part.count_ones();
+        for (data_part, mask_part) in self.data.iter().zip(mask) {
+            sum += (data_part & mask_part).count_ones();
+        }
 
         sum as usize
     }
@@ -176,3 +172,37 @@ impl Block for Block64 {
         block_offset as usize
     }
 }
+
+static BLOCK512_MASKS: [[u64; 8]; 512] = const {
+    let mut masks = [[0; 8]; 512];
+
+    let mut block64_idx = 0;
+
+    while block64_idx < 8 {
+        let mut bit_idx = 0;
+        while bit_idx < 64 {
+            masks[block64_idx * 64 + bit_idx][block64_idx] = !(u64::MAX << bit_idx);
+
+            bit_idx += 1;
+        }
+
+        block64_idx += 1;
+    }
+
+    let mut mask_idx = 0;
+
+    while mask_idx < 512 {
+        let complete_64blocks_below = mask_idx / 64;
+
+        let mut block64_idx = 0;
+        while block64_idx < complete_64blocks_below {
+            masks[mask_idx][block64_idx] = u64::MAX;
+
+            block64_idx += 1;
+        }
+
+        mask_idx += 1;
+    }
+
+    masks
+};
