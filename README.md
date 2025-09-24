@@ -13,7 +13,7 @@ A second, faster and less memory efficient encoding is also implemented in this 
 
 - Fast, parallel and memory efficient index construction by leveraging [`libsais-rs`] and [`rayon`].
 - Support for indexing a set of texts, like chromosomes of a genome.
-- Optimized functions for searching multiple queries at once (per thread!).
+- Optimized functions for searching multiple queries at once (per thread, this is not multithreading).
 - A flexible cursor API.
 - Fast reading and writing the FM-Index from/to files, using [`savefile`].
 - Thoroughly tested using [`proptest`].
