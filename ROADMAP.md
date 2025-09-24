@@ -1,6 +1,6 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
-### Hopefully coming soon: index for single texts
+### High priority: index for single texts
 
 - more flexible alphabet API
     - allow alphabet with sentinel included in io representation
@@ -20,7 +20,7 @@
 - in the search, `lookup_tables::compute_lookup_idx_static_len` still seems to be one of the bottlenecks. this
     should be investigated further, maybe it can be optimized or it's a measuring error.
 - the batching of search queries could be improved. Currenty, it is not efficent if the queries have very different lengths
-    or if many of them quickly get an empty interval, while other need ot be searched to the very end.
+    or if many of them quickly get an empty interval, while others need ot be searched to the very end.
 - more documentation tests
 
 ### Large topics, is the goal to eventually support
