@@ -97,17 +97,14 @@ impl Block for Block512 {
         let store_idx = idx / 64;
         let idx_in_store = idx % 64;
 
-        let mut mask = [0; 8];
-        for mask_part in &mut mask[..store_idx] {
-            *mask_part = u64::MAX;
-        }
-        mask[store_idx] = !(u64::MAX << idx_in_store);
-
         let mut sum = 0;
 
-        for (data_part, mask_part) in self.data.iter().zip(mask) {
-            sum += (data_part & mask_part).count_ones();
+        for &data_part in &self.data[..store_idx] {
+            sum += data_part.count_ones();
         }
+
+        let masked_data_part = self.data[store_idx] & !(u64::MAX << idx_in_store);
+        sum += masked_data_part.count_ones();
 
         sum as usize
     }
