@@ -10,7 +10,6 @@
 
 ### Nice to have, higher priority
 
-- compress text and/or bwt at some point during construction (half/half buffer)
 - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome)
     - maybe leverage the fact that such characters (namely N) often occur in runs
     - the sentinel can not be searched. the current sampled suffix array implementation has special handling for it.
@@ -18,9 +17,6 @@
         the condensed text with rank support will get smaller and maybe faster. 
         A text sampled suffix array could be an option, or a "sparse" text with rank support substructure.
 - paired blocks for improved memory usage when using larger alphabets
-- maybe a slow, super-low memory construction mode using the `sufr` crate (store suffix array in file)
-- experiment with batched search
-- mayeb type-erase index storage type and choose automatically for text size (does that work with savefile?)
 
 ### Large topics, is the goal to eventually support
 
@@ -29,13 +25,16 @@
 
 ### Nice to have, but low priority
 
-- suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
 - gate rayon/OpenMP usage behind feature flag
+- API to use batched search with cursors
+- type-erase index storage type and choose automatically for text size (does that work with savefile?)
 - optional functionality for text recovery
-- text sampled suffix array (optionally with text ids and other annotations)
+- text sampled suffix array (with text ids and optionally other annotations)
+- suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
 
 ### Large topics, might never happen
 
-- optimizations for highly repetitive texts such as run length encoding
 - FMD-Index
 - word-based FM-Indices
+- optimizations for highly repetitive texts such as run length encoding
+- ropeBWT/dynamic FM-Index

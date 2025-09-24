@@ -157,7 +157,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         &'a self,
         queries: impl IntoIterator<Item = &'a [u8]> + 'a,
     ) -> impl Iterator<Item = usize> {
-        BatchComputedCursors::<I, R, _, 16>::new(self, queries.into_iter())
+        BatchComputedCursors::<I, R, _, 32>::new(self, queries.into_iter())
             .map(|cursor| cursor.count())
     }
 
@@ -165,7 +165,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         &'a self,
         queries: impl IntoIterator<Item = &'a [u8]> + 'a,
     ) -> impl Iterator<Item: Iterator<Item = Hit>> {
-        BatchComputedCursors::<I, R, _, 16>::new(self, queries.into_iter())
+        BatchComputedCursors::<I, R, _, 32>::new(self, queries.into_iter())
             .map(|cursor| self.locate_interval(cursor.interval()))
     }
 
@@ -245,7 +245,6 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         self.lookup_tables.lookup(query_iter, lookup_depth)
     }
 
-    #[inline(always)]
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
         self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
     }

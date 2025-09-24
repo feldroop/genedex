@@ -1,4 +1,5 @@
 use crate::IndexStorage;
+use crate::batch_computed_cursors::Buffers;
 use crate::construction::slice_compression::SliceCompression;
 use crate::maybe_savefile::MaybeSavefile;
 use crate::sealed::Sealed;
@@ -27,6 +28,24 @@ pub struct FlatTextWithRankSupport<I, B = Block64> {
     superblock_size: usize,
     interleaved_blocks: Vec<B>,
     interleaved_superblock_offsets: Vec<I>,
+}
+
+impl<I: IndexStorage, B: Block> FlatTextWithRankSupport<I, B> {
+    fn superblock_offset_idx(&self, symbol: u8, idx: usize) -> usize {
+        let symbol_usize = symbol as usize;
+        (idx / self.superblock_size) * self.alphabet_size + symbol_usize
+    }
+
+    fn block_idx(&self, symbol: u8, idx: usize) -> usize {
+        let symbol_usize = symbol as usize;
+        let used_bits_per_block = B::NUM_BITS - NUM_BLOCK_OFFSET_BITS;
+        (idx / used_bits_per_block) * self.alphabet_size + symbol_usize
+    }
+
+    fn idx_in_block(idx: usize) -> usize {
+        let used_bits_per_block = B::NUM_BITS - NUM_BLOCK_OFFSET_BITS;
+        idx % used_bits_per_block
+    }
 }
 
 impl<I: IndexStorage, B: Block> MaybeSavefile for FlatTextWithRankSupport<I, B> {}
@@ -97,43 +116,127 @@ impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
             interleaved_superblock_offsets,
         }
     }
+
+    fn _alphabet_size(&self) -> usize {
+        self.alphabet_size
+    }
+
+    fn _text_len(&self) -> usize {
+        self.text_len
+    }
+
+    // TODO: maybe refactor this to get rid of all of the doubling for start and end of intervals
+    // this functions essentially does the same thing as Self::rank_unchecked for all of the
+    // intervals border in the buffers struct
+    unsafe fn replace_many_interval_borders_with_ranks_unchecked<const N: usize>(
+        &self,
+        buffers: &mut Buffers<N>,
+        num_remaining_unfinished_queries: usize,
+    ) {
+        // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
+        // and since the alphabet has a size of at least 2
+
+        // I hope the compiler removes all of the bounds checks in the buffers
+        assert!(num_remaining_unfinished_queries <= N);
+
+        let symbols = &buffers.symbols;
+        let intervals = &mut buffers.intervals;
+        let superblock_offsets_starts = &mut buffers.buffer1;
+        let superblock_offsets_ends = &mut buffers.buffer2;
+        let block_offsets_starts = &mut buffers.buffer3;
+        let block_offsets_ends = &mut buffers.buffer4;
+
+        // temporarily store superblock offset indices in the buffers
+        for i in 0..num_remaining_unfinished_queries {
+            superblock_offsets_starts[i] =
+                self.superblock_offset_idx(symbols[i], intervals[i].start);
+            superblock_offsets_ends[i] = self.superblock_offset_idx(symbols[i], intervals[i].end);
+        }
+
+        // now replace indices by values
+        // SAFETY: must succeed, otherwise the construction function would have crashed
+        for i in 0..num_remaining_unfinished_queries {
+            let superblock_offset_start = unsafe {
+                *self
+                    .interleaved_superblock_offsets
+                    .get_unchecked(superblock_offsets_starts[i])
+            };
+            superblock_offsets_starts[i] =
+                unsafe { <usize as NumCast>::from(superblock_offset_start).unwrap_unchecked() };
+
+            let superblock_offset_end = unsafe {
+                *self
+                    .interleaved_superblock_offsets
+                    .get_unchecked(superblock_offsets_ends[i])
+            };
+
+            superblock_offsets_ends[i] =
+                unsafe { <usize as NumCast>::from(superblock_offset_end).unwrap_unchecked() };
+        }
+
+        // temporarily store block indices in the buffers
+        for i in 0..num_remaining_unfinished_queries {
+            block_offsets_starts[i] = self.block_idx(symbols[i], intervals[i].start);
+            block_offsets_ends[i] = self.block_idx(symbols[i], intervals[i].end);
+        }
+
+        let mut blocks_starts: [B; N] = [B::zeroes(); N];
+        let mut blocks_ends: [B; N] = [B::zeroes(); N];
+
+        // hopefully, most of these memory loads happen in parallel on the hardware, because this is the most expensive part
+        for i in 0..num_remaining_unfinished_queries {
+            blocks_starts[i] = unsafe {
+                *self
+                    .interleaved_blocks
+                    .get_unchecked(block_offsets_starts[i])
+            };
+            blocks_ends[i] =
+                unsafe { *self.interleaved_blocks.get_unchecked(block_offsets_ends[i]) };
+        }
+
+        for i in 0..num_remaining_unfinished_queries {
+            block_offsets_starts[i] = blocks_starts[i].extract_block_offset_and_then_zeroize_it();
+            block_offsets_ends[i] = blocks_ends[i].extract_block_offset_and_then_zeroize_it();
+
+            let idx_in_block_start = Self::idx_in_block(intervals[i].start);
+            let idx_in_block_end = Self::idx_in_block(intervals[i].end);
+
+            let block_count_start =
+                blocks_starts[i].count_ones_before(idx_in_block_start + NUM_BLOCK_OFFSET_BITS);
+            let block_count_end =
+                blocks_ends[i].count_ones_before(idx_in_block_end + NUM_BLOCK_OFFSET_BITS);
+
+            intervals[i].start =
+                superblock_offsets_starts[i] + block_offsets_starts[i] + block_count_start;
+            intervals[i].end = superblock_offsets_ends[i] + block_offsets_ends[i] + block_count_end;
+        }
+    }
 }
 
 impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for FlatTextWithRankSupport<I, B> {
-    #[inline(always)]
-    fn rank(&self, symbol: u8, idx: usize) -> usize {
-        assert!((symbol as usize) < self.alphabet_size && idx <= self.text_len);
-        unsafe { self.rank_unchecked(symbol, idx) }
-    }
-
-    #[inline(always)]
     unsafe fn rank_unchecked(&self, symbol: u8, idx: usize) -> usize {
         // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
         // and since the alphabet has a size of at least 2
 
-        let symbol_usize = symbol as usize;
-
-        let superblock_offset_index =
-            (idx / self.superblock_size) * self.alphabet_size + symbol_usize;
+        let superblock_offset_idx = self.superblock_offset_idx(symbol, idx);
 
         let superblock_offset = unsafe {
             *self
                 .interleaved_superblock_offsets
-                .get_unchecked(superblock_offset_index)
+                .get_unchecked(superblock_offset_idx)
         };
 
         // SAFETY: must succeed, otherwise the construction function would have crashed
         let superblock_offset =
             unsafe { <usize as NumCast>::from(superblock_offset).unwrap_unchecked() };
 
-        let used_bits_per_block = B::NUM_BITS - NUM_BLOCK_OFFSET_BITS;
-        let block_idx = (idx / used_bits_per_block) * self.alphabet_size + symbol_usize;
+        let block_idx = self.block_idx(symbol, idx);
         let mut block = unsafe { *self.interleaved_blocks.get_unchecked(block_idx) };
 
         let block_offset = block.extract_block_offset_and_then_zeroize_it();
 
-        let index_in_block = idx % used_bits_per_block;
-        let block_count = block.count_ones_before(index_in_block + NUM_BLOCK_OFFSET_BITS);
+        let idx_in_block = Self::idx_in_block(idx);
+        let block_count = block.count_ones_before(idx_in_block + NUM_BLOCK_OFFSET_BITS);
 
         superblock_offset + block_offset + block_count
     }
@@ -157,14 +260,6 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for FlatTextWithRankSuppo
         }
 
         unreachable!()
-    }
-
-    fn alphabet_size(&self) -> usize {
-        self.alphabet_size
-    }
-
-    fn text_len(&self) -> usize {
-        self.text_len
     }
 }
 

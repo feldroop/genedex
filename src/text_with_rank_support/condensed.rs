@@ -1,6 +1,9 @@
+use std::ops::Range;
+
 use crate::{
-    IndexStorage, TextWithRankSupport, construction::slice_compression::SliceCompression,
-    maybe_savefile::MaybeSavefile, sealed::Sealed,
+    IndexStorage, TextWithRankSupport, batch_computed_cursors::Buffers,
+    construction::slice_compression::SliceCompression, maybe_savefile::MaybeSavefile,
+    sealed::Sealed,
 };
 
 use super::block::{Block, Block64};
@@ -23,6 +26,24 @@ pub struct CondensedTextWithRankSupport<I, B = Block64> {
     interleaved_blocks: Vec<B>,
     interleaved_block_offsets: Vec<u16>,
     interleaved_superblock_offsets: Vec<I>,
+}
+
+impl<I: IndexStorage, B: Block> CondensedTextWithRankSupport<I, B> {
+    fn superblock_offset_idx(&self, symbol: u8, idx: usize) -> usize {
+        let superblock_size = u16::MAX as usize + 1;
+        (idx / superblock_size) * self.alphabet_size + symbol as usize
+    }
+
+    fn block_offset_idx(&self, symbol: u8, idx: usize) -> usize {
+        (idx / B::NUM_BITS) * self.alphabet_size + symbol as usize
+    }
+
+    fn block_range(&self, idx: usize) -> Range<usize> {
+        let alphabet_num_bits = ilog2_ceil_for_nonzero(self.alphabet_size);
+        let interleaved_blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
+        let interleaved_blocks_end = interleaved_blocks_start + alphabet_num_bits;
+        interleaved_blocks_start..interleaved_blocks_end
+    }
 }
 
 impl<I: IndexStorage, B: Block> MaybeSavefile for CondensedTextWithRankSupport<I, B> {}
@@ -98,52 +119,199 @@ impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
             interleaved_superblock_offsets,
         }
     }
-}
 
-impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRankSupport<I, B> {
-    #[inline(always)]
-    fn rank(&self, symbol: u8, idx: usize) -> usize {
-        assert!((symbol as usize) < self.alphabet_size && idx <= self.text_len);
-        unsafe { self.rank_unchecked(symbol, idx) }
+    fn _alphabet_size(&self) -> usize {
+        self.alphabet_size
     }
 
-    #[inline(always)]
-    unsafe fn rank_unchecked(&self, mut symbol: u8, idx: usize) -> usize {
+    fn _text_len(&self) -> usize {
+        self.text_len
+    }
+
+    // TODO: maybe refactor this to get rid of all of the doubling for start and end of intervals
+    // this functions essentially does the same thing as Self::rank_unchecked for all of the
+    // intervals border in the buffers struct
+    unsafe fn replace_many_interval_borders_with_ranks_unchecked<const N: usize>(
+        &self,
+        buffers: &mut Buffers<N>,
+        num_remaining_unfinished_queries: usize,
+    ) {
         // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
         // and since the alphabet has a size of at least 2
 
-        let symbol_usize = symbol as usize;
-        let alphabet_num_bits = ilog2_ceil_for_nonzero(self.alphabet_size);
+        // I hope the compiler removes all of the bounds checks in the buffers
+        assert!(num_remaining_unfinished_queries <= N);
 
-        let superblock_size = u16::MAX as usize + 1;
-        let superblock_offset_index = (idx / superblock_size) * self.alphabet_size + symbol_usize;
+        let symbols = &buffers.symbols;
+        let intervals = &mut buffers.intervals;
+        let superblock_offsets_starts = &mut buffers.buffer1;
+        let superblock_offsets_ends = &mut buffers.buffer2;
+        let block_offsets_starts = &mut buffers.buffer3;
+        let block_offsets_ends = &mut buffers.buffer4;
+
+        // temporarily store superblock offset indices in the buffers
+        for i in 0..num_remaining_unfinished_queries {
+            superblock_offsets_starts[i] =
+                self.superblock_offset_idx(symbols[i], intervals[i].start);
+            superblock_offsets_ends[i] = self.superblock_offset_idx(symbols[i], intervals[i].end);
+        }
+
+        // now replace indices by values
+        // SAFETY: must succeed, otherwise the construction function would have crashed
+        for i in 0..num_remaining_unfinished_queries {
+            let superblock_offset_start = unsafe {
+                *self
+                    .interleaved_superblock_offsets
+                    .get_unchecked(superblock_offsets_starts[i])
+            };
+            superblock_offsets_starts[i] =
+                unsafe { <usize as NumCast>::from(superblock_offset_start).unwrap_unchecked() };
+
+            let superblock_offset_end = unsafe {
+                *self
+                    .interleaved_superblock_offsets
+                    .get_unchecked(superblock_offsets_ends[i])
+            };
+
+            superblock_offsets_ends[i] =
+                unsafe { <usize as NumCast>::from(superblock_offset_end).unwrap_unchecked() };
+        }
+
+        // temporarily store block offset indices in the buffers
+        for i in 0..num_remaining_unfinished_queries {
+            block_offsets_starts[i] = self.block_offset_idx(symbols[i], intervals[i].start);
+            block_offsets_ends[i] = self.block_offset_idx(symbols[i], intervals[i].end);
+        }
+
+        // now replace indices by values
+        // SAFETY: must succeed, otherwise the construction function would have crashed
+        for i in 0..num_remaining_unfinished_queries {
+            block_offsets_starts[i] = unsafe {
+                *self
+                    .interleaved_block_offsets
+                    .get_unchecked(block_offsets_starts[i])
+            } as usize;
+
+            block_offsets_ends[i] = unsafe {
+                *self
+                    .interleaved_block_offsets
+                    .get_unchecked(block_offsets_ends[i])
+            } as usize;
+        }
+
+        let mut block_slices_starts: [Option<&[B]>; N] = [None; N];
+        let mut block_slices_ends: [Option<&[B]>; N] = [None; N];
+        let mut accumulator_blocks_starts: [B; N] = [B::zeroes(); N];
+        let mut accumulator_blocks_ends: [B; N] = [B::zeroes(); N];
+
+        for i in 0..num_remaining_unfinished_queries {
+            let block_range_start = self.block_range(intervals[i].start);
+            block_slices_starts[i] =
+                Some(unsafe { self.interleaved_blocks.get_unchecked(block_range_start) });
+
+            let block_range_end = self.block_range(intervals[i].end);
+            block_slices_ends[i] =
+                Some(unsafe { self.interleaved_blocks.get_unchecked(block_range_end) });
+        }
+
+        // SAFETY: first unwrap_unchecked: this option was set to Some() in the above loop
+        // second unwrap_unchecked: there must be at least one block, because the alphabet size is at least 2
+        for i in 0..num_remaining_unfinished_queries {
+            let (first_block_start, other_blocks_start) = unsafe {
+                block_slices_starts[i]
+                    .unwrap_unchecked()
+                    .split_first()
+                    .unwrap_unchecked()
+            };
+
+            accumulator_blocks_starts[i] = *first_block_start;
+            block_slices_starts[i] = Some(other_blocks_start);
+
+            let (first_block_end, other_blocks_end) = unsafe {
+                block_slices_ends[i]
+                    .unwrap_unchecked()
+                    .split_first()
+                    .unwrap_unchecked()
+            };
+
+            accumulator_blocks_ends[i] = *first_block_end;
+            block_slices_ends[i] = Some(other_blocks_end);
+        }
+
+        for i in 0..num_remaining_unfinished_queries {
+            let mut symbol = symbols[i];
+            let accumulator_block_start = &mut accumulator_blocks_starts[i];
+            let accumulator_block_end = &mut accumulator_blocks_ends[i];
+
+            if symbol & 1 == 0 {
+                accumulator_block_start.negate();
+                accumulator_block_end.negate();
+            }
+
+            // SAFETY: the options were just set to Some() above
+            let block_slices_start = unsafe { block_slices_starts[i].unwrap_unchecked() };
+            let block_slices_end = unsafe { block_slices_ends[i].unwrap_unchecked() };
+
+            for (mut block_start, mut block_end) in block_slices_start
+                .iter()
+                .copied()
+                .zip(block_slices_end.iter().copied())
+            {
+                symbol >>= 1;
+
+                if symbol & 1 == 0 {
+                    block_start.negate();
+                    block_end.negate();
+                }
+
+                accumulator_block_start.set_to_self_and(block_start);
+                accumulator_block_end.set_to_self_and(block_end);
+            }
+        }
+
+        for i in 0..num_remaining_unfinished_queries {
+            let idx_in_block_start = intervals[i].start % B::NUM_BITS;
+            let idx_in_block_end = intervals[i].end % B::NUM_BITS;
+
+            let block_count_start =
+                accumulator_blocks_starts[i].count_ones_before(idx_in_block_start);
+            let block_count_end = accumulator_blocks_ends[i].count_ones_before(idx_in_block_end);
+
+            intervals[i].start =
+                superblock_offsets_starts[i] + block_offsets_starts[i] + block_count_start;
+            intervals[i].end = superblock_offsets_ends[i] + block_offsets_ends[i] + block_count_end;
+        }
+    }
+}
+
+impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRankSupport<I, B> {
+    unsafe fn rank_unchecked(&self, mut symbol: u8, idx: usize) -> usize {
+        // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
+        // and since the alphabet has a size of at least 2
+        let superblock_offset_idx = self.superblock_offset_idx(symbol, idx);
 
         let superblock_offset = unsafe {
             *self
                 .interleaved_superblock_offsets
-                .get_unchecked(superblock_offset_index)
+                .get_unchecked(superblock_offset_idx)
         };
 
         // SAFETY: must succeed, otherwise the construction function would have crashed
         let superblock_offset =
             unsafe { <usize as NumCast>::from(superblock_offset).unwrap_unchecked() };
 
-        let block_offset_index = (idx / B::NUM_BITS) * self.alphabet_size + symbol_usize;
+        let block_offset_idx = self.block_offset_idx(symbol, idx);
         let block_offset = unsafe {
             *self
                 .interleaved_block_offsets
-                .get_unchecked(block_offset_index)
+                .get_unchecked(block_offset_idx)
         } as usize;
 
-        let interleaved_blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
-        let interleaved_blocks_end = interleaved_blocks_start + alphabet_num_bits;
+        let block_range = self.block_range(idx);
 
-        let interleaved_blocks = unsafe {
-            &self
-                .interleaved_blocks
-                .get_unchecked(interleaved_blocks_start..interleaved_blocks_end)
-        };
+        let interleaved_blocks = unsafe { self.interleaved_blocks.get_unchecked(block_range) };
 
+        // SAFETY: there must be at least one block, because the alphabet size is at least 2
         let (first_block, other_blocks) =
             unsafe { interleaved_blocks.split_first().unwrap_unchecked() };
 
@@ -188,14 +356,6 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
         }
 
         symbol
-    }
-
-    fn text_len(&self) -> usize {
-        self.text_len
-    }
-
-    fn alphabet_size(&self) -> usize {
-        self.alphabet_size
     }
 }
 

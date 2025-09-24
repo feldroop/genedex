@@ -4,3 +4,4 @@
 #
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
+cc 141eacadce9140b6eb69869670f875b95c1104abb5d4a4f26748e9b84e3293cb # shrinks to (text, alphabet_size) = ([], 1)

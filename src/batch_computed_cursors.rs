@@ -2,15 +2,15 @@ use crate::{
     Cursor, FmIndex, HalfOpenInterval, IndexStorage, text_with_rank_support::TextWithRankSupport,
 };
 
-pub(crate) struct BatchComputedCursors<'a, I, R, Q, const B: usize> {
+pub(crate) struct BatchComputedCursors<'a, I, R, Q, const N: usize> {
     index: &'a FmIndex<I, R>,
     next_idx_in_batch: usize,
     curr_batch_size: usize,
-    buffers: Buffers<'a, B>,
     queries_iter: Q,
+    buffers: Buffers<'a, N>,
 }
 
-impl<'a, I, R, Q, const B: usize> BatchComputedCursors<'a, I, R, Q, B>
+impl<'a, I, R, Q, const N: usize> BatchComputedCursors<'a, I, R, Q, N>
 where
     I: IndexStorage,
     R: TextWithRankSupport<I>,
@@ -21,8 +21,8 @@ where
             index,
             next_idx_in_batch: 0,
             curr_batch_size: 0,
-            buffers: Buffers::new(),
             queries_iter,
+            buffers: Buffers::new(),
         }
     }
 
@@ -30,50 +30,38 @@ where
         self.next_idx_in_batch = 0;
         self.curr_batch_size = 0;
 
-        while self.curr_batch_size < B
+        while self.curr_batch_size < N
             && let Some(query) = self.queries_iter.next()
         {
             self.buffers.queries[self.curr_batch_size] = Some(query);
+            self.buffers.query_at_idx[self.curr_batch_size] = self.curr_batch_size;
             self.curr_batch_size += 1;
         }
 
-        // buffer 1 contains depths and intervals are updated
         self.batched_lookup_jumps();
 
-        loop {
-            let next_idx_in_queries = &mut self.buffers.buffer1;
+        // this idx is counting from the front and has to be reversed for the actual backwards seach
+        let mut next_idx_in_queries = self.index.lookup_tables.max_depth();
 
-            let queries = &self.buffers.queries;
-            let intervals = &mut self.buffers.intervals;
+        let mut num_remaining_unfinished_queries = self.curr_batch_size;
 
-            let mut all_queries_done = true;
-            for ((query, interval), next_idx) in
-                queries.iter().zip(intervals).zip(next_idx_in_queries)
-            {
-                if query.is_none() {
-                    continue;
-                }
+        self.move_finished_queries_to_end(
+            next_idx_in_queries,
+            &mut num_remaining_unfinished_queries,
+        );
 
-                let query = query.unwrap();
-                if *next_idx < query.len() && interval.start != interval.end {
-                    all_queries_done = false;
+        // one loop iteration does does up to N LF-mappings in a batch
+        while num_remaining_unfinished_queries > 0 {
+            self.batched_lf_mappings(next_idx_in_queries, num_remaining_unfinished_queries);
 
-                    let rev_idx = query.len() - *next_idx - 1;
-                    let symbol = self
-                        .index
-                        .alphabet
-                        .io_to_dense_representation(query[rev_idx]);
-                    interval.start = self.index.lf_mapping_step(symbol, interval.start);
-                    interval.end = self.index.lf_mapping_step(symbol, interval.end);
-
-                    *next_idx += 1;
-                }
-            }
-
-            if all_queries_done {
-                break;
-            }
+            next_idx_in_queries += 1;
+            self.move_finished_queries_to_end(
+                next_idx_in_queries,
+                &mut num_remaining_unfinished_queries,
+            );
         }
+
+        self.move_queries_back_to_initial_order();
     }
 
     fn batched_lookup_jumps(&mut self) {
@@ -103,9 +91,86 @@ where
             .lookup_tables
             .lookup_idx_many(depths, idxs, &mut self.buffers.intervals);
     }
+
+    fn batched_lf_mappings(
+        &mut self,
+        next_idx_in_queries: usize,
+        num_remaining_unfinished_queries: usize,
+    ) {
+        let queries: &[Option<&'a [u8]>] =
+            &self.buffers.queries[..num_remaining_unfinished_queries];
+        let symbols = &mut self.buffers.symbols[..num_remaining_unfinished_queries];
+
+        for (query, symbol) in queries.iter().zip(symbols) {
+            let query = query.unwrap();
+            let rev_idx = query.len() - next_idx_in_queries - 1;
+            *symbol = self
+                .index
+                .alphabet
+                .io_to_dense_representation(query[rev_idx]);
+        }
+
+        self.index
+            .text_with_rank_support
+            .replace_many_interval_borders_with_ranks(
+                &mut self.buffers,
+                num_remaining_unfinished_queries,
+            );
+
+        // add counts to finalize lf mapping formula
+        let symbols = &self.buffers.symbols[..num_remaining_unfinished_queries];
+        let intervals = &mut self.buffers.intervals[..num_remaining_unfinished_queries];
+        for (interval, &symbol) in intervals.iter_mut().zip(symbols) {
+            interval.start += self.index.count[symbol as usize];
+            interval.end += self.index.count[symbol as usize];
+        }
+    }
+
+    fn move_finished_queries_to_end(
+        &mut self,
+        next_idx_in_queries: usize,
+        num_remaining_unfinished_queries: &mut usize,
+    ) {
+        let mut i = 0;
+
+        while i < *num_remaining_unfinished_queries {
+            let interval = self.buffers.intervals[i];
+
+            if let Some(query) = self.buffers.queries[i]
+                && query.len() > next_idx_in_queries
+                && interval.start != interval.end
+            {
+                // query is unfinished
+                i += 1;
+                continue;
+            }
+
+            // swap finished query to end
+            let j = *num_remaining_unfinished_queries - 1;
+            self.buffers.queries.swap(i, j);
+            self.buffers.intervals.swap(i, j);
+            self.buffers.query_at_idx.swap(i, j);
+
+            *num_remaining_unfinished_queries -= 1;
+        }
+    }
+
+    fn move_queries_back_to_initial_order(&mut self) {
+        let mut i = 0;
+        while i < self.curr_batch_size {
+            // this means query j is at idx i
+            let j = self.buffers.query_at_idx[i];
+            if i == j {
+                i += 1;
+                continue;
+            }
+            self.buffers.intervals.swap(i, j);
+            self.buffers.query_at_idx.swap(i, j);
+        }
+    }
 }
 
-impl<'a, I, R, Q, const B: usize> Iterator for BatchComputedCursors<'a, I, R, Q, B>
+impl<'a, I, R, Q, const N: usize> Iterator for BatchComputedCursors<'a, I, R, Q, N>
 where
     I: IndexStorage,
     R: TextWithRankSupport<I>,
@@ -130,25 +195,37 @@ where
     }
 }
 
-struct Buffers<'a, const B: usize> {
-    intervals: [HalfOpenInterval; B],
-    queries: [Option<&'a [u8]>; B],
-    buffer1: [usize; B],
-    buffer2: [usize; B],
+pub(crate) struct Buffers<'a, const N: usize> {
+    pub(crate) intervals: [HalfOpenInterval; N],
+    queries: [Option<&'a [u8]>; N],
+    query_at_idx: [usize; N],
+    pub(crate) symbols: [u8; N],
+    pub(crate) buffer1: [usize; N],
+    pub(crate) buffer2: [usize; N],
+    pub(crate) buffer3: [usize; N],
+    pub(crate) buffer4: [usize; N],
 }
 
-impl<'a, const B: usize> Buffers<'a, B> {
-    fn new() -> Self {
-        let intervals = [HalfOpenInterval { start: 0, end: 0 }; B];
-        let queries = [None; B];
-        let buffer1 = [0; B];
-        let buffer2 = [0; B];
+impl<'a, const N: usize> Buffers<'a, N> {
+    pub(crate) fn new() -> Self {
+        let intervals = [HalfOpenInterval { start: 0, end: 0 }; N];
+        let queries = [None; N];
+        let query_at_idx = [0; N];
+        let symbols = [0; N];
+        let buffer1 = [0; N];
+        let buffer2 = [0; N];
+        let buffer3 = [0; N];
+        let buffer4 = [0; N];
 
         Self {
             intervals,
             queries,
+            query_at_idx,
+            symbols,
             buffer1,
             buffer2,
+            buffer3,
+            buffer4,
         }
     }
 }
