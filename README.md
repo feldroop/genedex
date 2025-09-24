@@ -7,12 +7,13 @@
 The [FM-Index] is a full-text index data structure that allows efficiently counting and retrieving all occurrenes of short sequences in very large texts. It is widely used in sequence analysis and bioinformatics.
 
 The implementation of this library is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
-by Simon Gene Gottlieb, who also was a great help while developing this library. This data structure is central to the inner workings of
+by Simon Gene Gottlieb, who also was a great help while developing the library. This data structure is central to the inner workings of
 the FM-Index. The encoding attemps to provide a good trade-off between memory usage and running time of queries. 
 A second, faster and less memory efficient encoding is also implemented in this library. Further benefits of `genedex` include:
 
 - Fast, parallel and memory efficient index construction by leveraging [`libsais-rs`] and [`rayon`].
 - Support for indexing a set of texts, like chromosomes of a genome.
+- Optimized functions for searching multiple queries at once (per thread!).
 - A flexible cursor API.
 - Fast reading and writing the FM-Index from/to files, using [`savefile`].
 - Thoroughly tested using [`proptest`].

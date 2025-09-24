@@ -246,17 +246,20 @@ impl Alphabet {
     }
 }
 
-/// Includes only the four bases of DNA A,C,G and T (case-insensitive).
+/// Includes only the four bases of DNA A, C, G and T (case-insensitive).
 pub fn ascii_dna() -> Alphabet {
     Alphabet::from_ambiguous_io_symbols([b"Aa", b"Cc", b"Gg", b"Tt"], 0)
 }
 
-/// Includes the four bases of DNA A,C,G and T, and the N character (case-insensitive). The N character is not allowed to be searched.
+/// Includes the four bases of DNA A, C, G and T, and the N character (case-insensitive). The N character is not allowed to be searched.
 pub fn ascii_dna_with_n() -> Alphabet {
     Alphabet::from_ambiguous_io_symbols([b"Aa", b"Cc", b"Gg", b"Tt", b"Nn"], 1)
 }
 
 /// Includes all values of the IUPAC standard (or .fasta format) for DNA bases, except for gaps (case-insensitive).
+///
+/// All symbols are allowed to be searched, but the "degenerate" symbols are not resolved to match their base symbols.
+/// For example, M means "A or C", but an M in the searched query does not match at an A or C of the indexed texts.
 pub fn ascii_dna_iupac() -> Alphabet {
     Alphabet::from_ambiguous_io_symbols(
         [
@@ -282,7 +285,7 @@ pub fn ascii_dna_iupac_as_dna_with_n() -> Alphabet {
     )
 }
 
-/// Includes only values that correspond to single amino acids (case-insensitive).
+/// Includes only values that correspond to single amino acids in the IUPAC standard (case-insensitive).
 pub fn ascii_amino_acid() -> Alphabet {
     Alphabet::from_ambiguous_io_symbols(
         [
@@ -294,6 +297,7 @@ pub fn ascii_amino_acid() -> Alphabet {
 }
 
 /// Includes all values of the IUPAC standard (or .fasta format) for amino acids, except for gaps (case-insensitive).
+/// This alphabet therefore contains all letters of the basic latin alphabet, and the symbol `*`.
 pub fn ascii_amino_acid_iupac() -> Alphabet {
     Alphabet::from_ambiguous_io_symbols(
         [
@@ -329,12 +333,12 @@ pub fn ascii_amino_acid_iupac() -> Alphabet {
     )
 }
 
-/// Includes all u8 values until the `max_symbol` value.
+/// Includes all u8 values until including the `max_symbol` value.
 pub fn u8_until(max_symbol: u8) -> Alphabet {
     Alphabet::from_io_symbols(0..=max_symbol, 0)
 }
 
-/// Includes all printable symbols of the ASCII code (case-sensitive).
+/// Includes all 95 printable symbols of the ASCII code (case-sensitive).
 pub fn ascii_printable() -> Alphabet {
     Alphabet::from_io_symbols(b" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", 0)
 }

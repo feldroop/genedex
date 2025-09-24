@@ -68,20 +68,15 @@ where
         let depths = &mut self.buffers.buffer1[..self.curr_batch_size];
         let idxs = &mut self.buffers.buffer2[..self.curr_batch_size];
 
-        for ((&query, depth), idx) in self
-            .buffers
-            .queries
-            .iter()
-            .take(self.curr_batch_size)
-            .zip(depths)
-            .zip(idxs)
-        {
+        for ((&query, depth), idx) in self.buffers.queries.iter().zip(depths).zip(idxs) {
             let query = query.unwrap();
             *depth = std::cmp::min(query.len(), self.index.lookup_tables.max_depth());
+            let suffix_idx = query.len() - *depth;
+
             *idx = self
                 .index
                 .lookup_tables
-                .compute_lookup_idx(&mut self.index.get_query_iter(query), *depth);
+                .compute_lookup_idx(&query[suffix_idx..], &self.index.alphabet);
         }
 
         let depths = &mut self.buffers.buffer1[..self.curr_batch_size];

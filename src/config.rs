@@ -88,11 +88,15 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> Default for FmIndexConfig<I, R>
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PerformancePriority {
     HighSpeed,
-    /// This is currently equivalent to `HighSpeed`, but that will change in the future.
+    /// For alphabets with 16 or less symbols in dense encoding, the temporary concatenated text and
+    /// the BWT buffer can be compressed to use less memory while constructing the BWT. This reduces the peak memory usage
+    /// of the construction by about 10-15% and only takes a small amount of additional running time.
     Balanced,
-    /// A slower, not parallel suffix array construction algorithm will be used for `u32`-based FM-Indices,
-    /// if the `u32-saca` feature is activated (by default it is).
+    /// In addition to the space improvements of the `Balanced` variant, a much slower, not parallel suffix
+    /// array construction algorithm will be used for `u32`-based FM-Indices.
+    /// This only happens if the `u32-saca` feature is activated (by default it is).
     /// This can save a lot of memory when the sum of text lengths fits into a `u32`, but not into a `i32`.
+    /// The downside is that the construction is much slower (at least 5 times slower should be expected).
     LowMemory,
 }
 

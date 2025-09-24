@@ -31,8 +31,14 @@
  * }
  * ```
  *
- * More information about the flexible [cursor](Cursor) API, build [configuration](FmIndexConfig) and [variants](TextWithRankSupport) of the FM-Index can
- * be found in the module-level and struct-level documentation.
+ * More information about the flexible [cursor](Cursor) API, build [configuration](FmIndexConfig)
+ * and [variants](TextWithRankSupport) of the FM-Index can be found in the module-level and struct-level documentation.
+ *
+ * Optimized functions such as [`FmIndex::locate_many`] exist for searching multiple queries at once. They do not use
+ * multi-threading, but can still be significantly faster (around 2x) than calling the respective functions for single
+ * queries in a loop. The reason for the improved performance is that the queries are searched in batches, which allows
+ * different kinds of parallelism inside the CPU to be used. An example of how such a function is used can be found
+ * [here](https://github.com/feldroop/genedex/blob/master/examples/basic_usage.rs).
  *
  * [original paper]: https://doi.org/10.1109/SFCS.2000.892127
  * [`libsais-rs`]: https://github.com/feldroop/libsais-rs
@@ -42,6 +48,9 @@
 pub mod alphabet;
 
 /// Different implementations of the text with rank support (a.k.a. occurrence table) data structure that powers the FM-Index.
+///
+/// The [`TextWithRankSupport`] and [`Block`](text_with_rank_support::Block) traits are good places to start
+///  learning about this module.
 pub mod text_with_rank_support;
 
 mod batch_computed_cursors;
@@ -89,10 +98,11 @@ pub struct FmIndex<I, R = CondensedTextWithRankSupport<I, Block64>> {
     lookup_tables: LookupTables<I>,
 }
 
-/// A little faster than [`FmIndexCondensed512`], but still space efficient for larger alphabets.
+/// A little faster than [`FmIndexCondensed512`], and still space efficient for larger alphabets.
+/// This is the default version.
 pub type FmIndexCondensed64<I> = FmIndex<I, CondensedTextWithRankSupport<I, Block64>>;
 
-/// The most space efficent version.
+/// The most space efficient version.
 pub type FmIndexCondensed512<I> = FmIndex<I, CondensedTextWithRankSupport<I, Block512>>;
 
 /// The fastest version.
@@ -100,6 +110,8 @@ pub type FmIndexFlat64<I> = FmIndex<I, FlatTextWithRankSupport<I, Block64>>;
 
 /// A little smaller and slower than [`FmIndexFlat64`]. [`FmIndexCondensed64`] should be a better trade-off for most applications.
 pub type FmIndexFlat512<I> = FmIndex<I, FlatTextWithRankSupport<I, Block512>>;
+
+const BATCH_SIZE: usize = 64;
 
 impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     fn new<T: AsRef<[u8]>>(
@@ -141,6 +153,18 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         self.cursor_for_query(query).count()
     }
 
+    /// The results of [`Self::count`] for multiple queries.
+    ///
+    /// The order of the queries is preserved for the counts. This function can improve the running
+    /// time when many queries are searched.
+    pub fn count_many<'a>(
+        &'a self,
+        queries: impl IntoIterator<Item = &'a [u8]>,
+    ) -> impl Iterator<Item = usize> {
+        self.cursors_for_many_queries(queries)
+            .map(|cursor| cursor.count())
+    }
+
     /// Returns the number of occurrences of `query` in the set of indexed texts.
     ///
     /// The initial running time is the same as for [`count`](Self::count).
@@ -153,19 +177,15 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         self.locate_interval(cursor.interval())
     }
 
-    pub fn count_many<'a>(
-        &'a self,
-        queries: impl IntoIterator<Item = &'a [u8]> + 'a,
-    ) -> impl Iterator<Item = usize> {
-        BatchComputedCursors::<I, R, _, 32>::new(self, queries.into_iter())
-            .map(|cursor| cursor.count())
-    }
-
+    /// The results of [`Self::locate`] for multiple queries.
+    ///
+    /// The order of the queries is preserved for the hits. This function can improve the running
+    /// time when many queries are searched.
     pub fn locate_many<'a>(
         &'a self,
-        queries: impl IntoIterator<Item = &'a [u8]> + 'a,
+        queries: impl IntoIterator<Item = &'a [u8]>,
     ) -> impl Iterator<Item: Iterator<Item = Hit>> {
-        BatchComputedCursors::<I, R, _, 32>::new(self, queries.into_iter())
+        self.cursors_for_many_queries(queries)
             .map(|cursor| self.locate_interval(cursor.interval()))
     }
 
@@ -200,26 +220,51 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     /// This allows using a lookup table jump and therefore can be more efficient than creating
     /// an empty cursor and repeatedly calling [`Cursor::extend_query_front`].
     pub fn cursor_for_query<'a>(&'a self, query: &[u8]) -> Cursor<'a, I, R> {
-        let query_iter = self.get_query_iter(query);
-        self.cursor_for_iter_without_alphabet_translation(query_iter)
-    }
-
-    fn cursor_for_iter_without_alphabet_translation<'a, Q>(
-        &'a self,
-        query: impl IntoIterator<IntoIter = Q>,
-    ) -> Cursor<'a, I, R>
-    where
-        Q: ExactSizeIterator<Item = u8>,
-    {
-        let mut query_iter = query.into_iter();
-        let interval = self.initial_lookup_table_jump(&mut query_iter);
+        let (remaining_query, query_suffix) = self.split_query_for_lookup(query);
+        let interval = self.lookup_tables.lookup(query_suffix, &self.alphabet);
 
         let mut cursor = Cursor {
             index: self,
             interval,
         };
 
-        for symbol in query_iter {
+        for &symbol in remaining_query.iter().rev() {
+            cursor.extend_query_front(symbol);
+
+            if cursor.count() == 0 {
+                break;
+            }
+        }
+
+        cursor
+    }
+
+    /// The results of [`Self::cursor_for_query`] for multiple queries.
+    ///
+    /// The order of the queries is preserved for the cursors. This function can improve the running
+    /// time when many queries are searched.
+    pub fn cursors_for_many_queries<'a>(
+        &'a self,
+        queries: impl IntoIterator<Item = &'a [u8]>,
+    ) -> impl Iterator<Item = Cursor<'a, I, R>> {
+        BatchComputedCursors::<I, R, _, BATCH_SIZE>::new(self, queries.into_iter())
+    }
+
+    fn cursor_for_query_without_alphabet_translation<'a>(
+        &'a self,
+        query: &[u8],
+    ) -> Cursor<'a, I, R> {
+        let (remaining_query, query_suffix) = self.split_query_for_lookup(query);
+        let interval = self
+            .lookup_tables
+            .lookup_without_alphabet_translation(query_suffix);
+
+        let mut cursor = Cursor {
+            index: self,
+            interval,
+        };
+
+        for &symbol in remaining_query.iter().rev() {
             cursor.extend_front_without_alphabet_translation(symbol);
 
             if cursor.count() == 0 {
@@ -230,23 +275,14 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
         cursor
     }
 
-    fn get_query_iter(&self, query: &[u8]) -> impl ExactSizeIterator<Item = u8> {
-        query
-            .iter()
-            .rev()
-            .map(|&s| self.alphabet.io_to_dense_representation(s))
-    }
-
-    fn initial_lookup_table_jump(
-        &self,
-        query_iter: &mut impl ExactSizeIterator<Item = u8>,
-    ) -> HalfOpenInterval {
-        let lookup_depth = std::cmp::min(query_iter.len(), self.lookup_tables.max_depth());
-        self.lookup_tables.lookup(query_iter, lookup_depth)
-    }
-
     fn lf_mapping_step(&self, symbol: u8, idx: usize) -> usize {
         self.count[symbol as usize] + self.text_with_rank_support.rank(symbol, idx)
+    }
+
+    fn split_query_for_lookup<'a>(&self, query: &'a [u8]) -> (&'a [u8], &'a [u8]) {
+        let lookup_depth = std::cmp::min(query.len(), self.lookup_tables.max_depth());
+        let suffix_idx = query.len() - lookup_depth;
+        query.split_at(suffix_idx)
     }
 
     pub fn alphabet(&self) -> &Alphabet {

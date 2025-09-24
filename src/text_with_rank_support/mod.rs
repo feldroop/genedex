@@ -80,7 +80,7 @@ pub(crate) trait PrivateTextWithRankSupport<I: IndexStorage>: Sealed {
 /// In total, [`FlatTextWithRankSupport<Block64>`] is the fastest, and [`CondensedTextWithRankSupport<Block512>`]
 /// is the smallest configuration.
 ///
-/// An example of how this data structure is used can be found
+/// An example of how these data structures are used can be found
 /// [here](https://github.com/feldroop/genedex/blob/master/examples/text_with_rank_support.rs).
 // I don't want to make the slice compression API public
 #[allow(private_bounds)]
@@ -107,8 +107,6 @@ pub trait TextWithRankSupport<I: IndexStorage>:
         assert!(is_safe);
         unsafe { self.rank_unchecked(symbol, idx) }
     }
-
-    // TODO rank_two
 
     /// Version of [`rank`](Self::rank) without bounds checks.
     ///

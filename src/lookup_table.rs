@@ -1,32 +1,123 @@
 use num_traits::NumCast;
 
-use crate::{FmIndex, HalfOpenInterval, IndexStorage, text_with_rank_support::TextWithRankSupport};
+use crate::{
+    Alphabet, FmIndex, HalfOpenInterval, IndexStorage, text_with_rank_support::TextWithRankSupport,
+};
 
+// the lookup table allows obtaining the interval for a query suffix directly, without LF-mappings
+// it stores precomputed intervals for all possible suffixes up to a length of max depth
+
+// in this implementation, the index also stores lookup tables for all values from 0 to max_depth,
+// because the smaller tables require only a fraction of the memory of the larger tables,
+// can speed up short queries and make the lookup table build process simple and efficient by iteratively
+// constructing lookup tables for larger suffixes up to max depth
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone)]
 pub(crate) struct LookupTables<I> {
     num_symbols: usize,
+    factors: Vec<usize>,
     tables: Vec<LookupTable<I>>,
+}
+
+// there is a crate for this, but it seems to be unmaintained and experimental
+macro_rules! const_curry_match {
+    ($n:ident, $query_suffix:ident, $self:ident, $alphabet:ident, $($i:literal),*) => {
+        match $n {
+            $(
+                $i => compute_lookup_idx_static_len::<$i>(
+                    $query_suffix.try_into().unwrap(),
+                    $self.factors[..$n].try_into().unwrap(),
+                    $alphabet,
+                ),
+            )*
+            _ => $self.compute_lookup_idx_dynamic_len($query_suffix, $alphabet)
+        }
+    };
 }
 
 impl<I: IndexStorage> LookupTables<I> {
     pub(crate) fn new_empty() -> Self {
         Self {
             num_symbols: 0,
+            factors: Vec::new(),
             tables: Vec::new(),
         }
     }
 
-    pub(crate) fn lookup<Q>(&self, query_iter: &mut Q, depth: usize) -> HalfOpenInterval
-    where
-        Q: Iterator<Item = u8>,
-    {
-        let idx = self.compute_lookup_idx(query_iter, depth);
-        self.lookup_idx(depth, idx)
+    pub(crate) fn lookup(&self, query_suffix: &[u8], alphabet: &Alphabet) -> HalfOpenInterval {
+        let idx = self.compute_lookup_idx(query_suffix, alphabet);
+        self.lookup_idx(query_suffix.len(), idx)
     }
 
-    pub(crate) fn lookup_idx(&self, depth: usize, idx: usize) -> HalfOpenInterval {
+    pub(crate) fn lookup_without_alphabet_translation(
+        &self,
+        query_suffix: &[u8],
+    ) -> HalfOpenInterval {
+        let idx = self.compute_lookup_idx_without_alphabet_transition(query_suffix);
+        self.lookup_idx(query_suffix.len(), idx)
+    }
+
+    fn lookup_idx(&self, depth: usize, idx: usize) -> HalfOpenInterval {
         self.tables[depth].lookup(idx)
+    }
+
+    pub(crate) fn compute_lookup_idx(&self, query_suffix: &[u8], alphabet: &Alphabet) -> usize {
+        let n = query_suffix.len();
+
+        // a little "const currying" optimization technique, because this function actually showed
+        // up taking a significant amount of running time in the flamegraph. it actually gave a little improvement
+        const_curry_match!(
+            n,
+            query_suffix,
+            self,
+            alphabet,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+        )
+    }
+
+    pub(crate) fn compute_lookup_idx_dynamic_len(
+        &self,
+        query_suffix: &[u8],
+        alphabet: &Alphabet,
+    ) -> usize {
+        let mut idx = 0;
+
+        for (&symbol, &factor) in query_suffix.iter().zip(&self.factors) {
+            // subtract one, because the sentinel is not stored in the table
+            let dense_symbol = alphabet.io_to_dense_representation(symbol) - 1;
+            idx += dense_symbol as usize * factor;
+        }
+
+        idx
+    }
+
+    pub(crate) fn compute_lookup_idx_without_alphabet_transition(
+        &self,
+        query_suffix: &[u8],
+    ) -> usize {
+        let mut idx = 0;
+
+        for (&symbol, &factor) in query_suffix.iter().zip(&self.factors) {
+            // subtract one, because the sentinel is not stored in the table
+            idx += (symbol as usize - 1) * factor;
+        }
+
+        idx
     }
 
     // gives false positive error for now
@@ -42,26 +133,25 @@ impl<I: IndexStorage> LookupTables<I> {
         }
     }
 
-    pub(crate) fn compute_lookup_idx<Q>(&self, query_iter: &mut Q, depth: usize) -> usize
-    where
-        Q: Iterator<Item = u8>,
-    {
-        let mut idx = 0;
-        let mut exponent = depth.saturating_sub(1);
-
-        for symbol in query_iter.take(depth) {
-            // subtract one, because the sentinel is not stored in the table
-            let symbol = symbol - 1;
-            idx += symbol as usize * self.num_symbols.pow(exponent as u32);
-            exponent = exponent.saturating_sub(1);
-        }
-
-        idx
-    }
-
     pub(crate) fn max_depth(&self) -> usize {
         self.tables.len() - 1
     }
+}
+
+pub(crate) fn compute_lookup_idx_static_len<const N: usize>(
+    query_suffix: &[u8; N],
+    factors: &[usize; N],
+    alphabet: &Alphabet,
+) -> usize {
+    let mut idx = 0;
+
+    for (&symbol, &factor) in query_suffix.iter().zip(factors) {
+        // subtract one, because the sentinel is not stored in the table
+        let dense_symbol = alphabet.io_to_dense_representation(symbol) - 1;
+        idx += dense_symbol as usize * factor;
+    }
+
+    idx
 }
 
 pub(crate) fn fill_lookup_tables<I: IndexStorage, R: TextWithRankSupport<I>>(
@@ -70,6 +160,10 @@ pub(crate) fn fill_lookup_tables<I: IndexStorage, R: TextWithRankSupport<I>>(
     num_symbols: usize,
 ) {
     index.lookup_tables.num_symbols = num_symbols;
+
+    index.lookup_tables.factors = (0..=max_depth)
+        .map(|exponent| num_symbols.pow(exponent as u32))
+        .collect();
 
     // iteratively fill lookup tables, to allow using the smaller tables in the search already for the larger tables
     for depth in 0..=max_depth {
@@ -99,7 +193,7 @@ impl<I: IndexStorage> LookupTable<I> {
         let mut query = vec![0; depth];
 
         if depth > 0 {
-            fill_table(1, depth, num_symbols, 0, &mut data, &mut query, index);
+            fill_table(1, depth, num_symbols, &mut data, &mut query, index);
         } else {
             data[0] = (
                 <I as NumCast>::from(0).unwrap(),
@@ -125,7 +219,6 @@ fn fill_table<I: IndexStorage, R: TextWithRankSupport<I>>(
     curr_depth: usize,
     max_depth: usize,
     num_symbols: usize,
-    curr_data_idx: usize,
     data: &mut [(I, I)],
     query: &mut [u8],
     index: &FmIndex<I, R>,
@@ -135,10 +228,14 @@ fn fill_table<I: IndexStorage, R: TextWithRankSupport<I>>(
             query[curr_depth - 1] = symbol as u8 + 1; // +1 to offset sentinel
 
             let interval = index
-                .cursor_for_iter_without_alphabet_translation(query.iter().copied())
+                .cursor_for_query_without_alphabet_translation(query)
                 .interval();
 
-            data[curr_data_idx + symbol] = (
+            let idx = index
+                .lookup_tables
+                .compute_lookup_idx_without_alphabet_transition(query);
+
+            data[idx] = (
                 <I as NumCast>::from(interval.start).unwrap(),
                 <I as NumCast>::from(interval.end).unwrap(),
             );
@@ -148,17 +245,7 @@ fn fill_table<I: IndexStorage, R: TextWithRankSupport<I>>(
     }
 
     for symbol in 0..num_symbols {
-        let exponent = max_depth - curr_depth;
-        let next_data_index = curr_data_idx + symbol * num_symbols.pow(exponent as u32);
         query[curr_depth - 1] = symbol as u8 + 1; // +1 to offset sentinel
-        fill_table(
-            curr_depth + 1,
-            max_depth,
-            num_symbols,
-            next_data_index,
-            data,
-            query,
-            index,
-        );
+        fill_table(curr_depth + 1, max_depth, num_symbols, data, query, index);
     }
 }

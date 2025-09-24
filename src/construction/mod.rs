@@ -66,6 +66,7 @@ pub(crate) fn create_data_structures<I: IndexStorage, R: TextWithRankSupport<I>,
 pub trait IndexStorage:
     PrimInt + Pod + maybe_savefile::MaybeSavefile + sealed::Sealed + Send + Sync + 'static
 {
+    #[doc(hidden)]
     type LibsaisOutput: OutputElement + IndexStorage;
 
     #[doc(hidden)]
