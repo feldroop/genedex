@@ -39,7 +39,6 @@
 - optimized functions for reading directly from input files: both for texts to build the index and queries to search.
     the latter might be more important, because for simple searches, the search can be faster than reading the 
     queries from disk.
-- optimize `sais-drum` to make the low memory construction mode less painful
 
 ### Large topics, might never happen
 

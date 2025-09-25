@@ -207,7 +207,7 @@ impl IndexStorage for u32 {
                     alphabet,
                 );
 
-                // NOT call Self::sample_suffix_array_maybe_u32_compressed, because after using u32 sais-drum
+                // NOT call Self::sample_suffix_array_maybe_u32_compressed, because after using u32 saca
                 // the suffix array does not need ot be compressed
                 let sampled_suffix_array = SampledSuffixArray::new_uncompressed(
                     suffix_array_data,
