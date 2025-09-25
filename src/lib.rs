@@ -165,7 +165,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
             .map(|cursor| cursor.count())
     }
 
-    /// Returns the number of occurrences of `query` in the set of indexed texts.
+    /// Returns the occurrences of `query` in the set of indexed texts. The occurrences are not sorted by text id or position.
     ///
     /// The initial running time is the same as for [`count`](Self::count).
     /// For each hit pulled from the iterator, a sampled suffix array lookup is performed.

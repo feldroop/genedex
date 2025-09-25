@@ -21,6 +21,7 @@
     should be investigated further, maybe it can be optimized or it's a measuring error.
 - the batching of search queries could be improved. Currenty, it is not efficent if the queries have very different lengths
     or if many of them quickly get an empty interval, while others need ot be searched to the very end.
+- functionality to directly retrieve maximal exact matches 
 - more documentation tests
 
 ### Large topics, is the goal to eventually support
@@ -44,5 +45,5 @@
 
 - FMD-Index
 - word-based FM-Indices
-- optimizations for highly repetitive texts such as run length encoding
+- optimizations for highly repetitive texts such as run length encoding (r-index)
 - ropeBWT/dynamic FM-Index

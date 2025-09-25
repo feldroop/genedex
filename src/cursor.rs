@@ -62,7 +62,7 @@ impl<'a, I: IndexStorage, R: TextWithRankSupport<I>> Cursor<'a, I, R> {
         self.interval.end - self.interval.start
     }
 
-    /// Returns the number of occurrences of the currently searched query in the set of indexed texts.
+    /// Returns the occurrences of `query` in the set of indexed texts. The occurrences are not sorted by text id or position.
     ///
     /// The initial running time is in O(1).
     /// For each hit pulled from the iterator, a sampled suffix array lookup is performed.
