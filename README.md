@@ -4,7 +4,7 @@
 [![Crates.io](https://img.shields.io/crates/v/genedex.svg?style=flat-square&logo=rust)](https://crates.io/crates/genedex)
 [![Documentation](https://img.shields.io/docsrs/genedex?style=flat-square&logo=rust)](https://docs.rs/genedex)
 
-The [FM-Index] is a full-text index data structure that allows efficiently counting and retrieving all occurrenes of short sequences in very large texts. It is widely used in sequence analysis and bioinformatics.
+The [FM-Index] is a full-text index data structure that allows efficiently counting and retrieving the positions of all occurrenes of short sequences in very large texts. It is widely used in sequence analysis and bioinformatics.
 
 The implementation of this library is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
 by Simon Gene Gottlieb, who also was a great help while developing the library. This data structure is central to the inner workings of
