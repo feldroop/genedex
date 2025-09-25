@@ -1,5 +1,7 @@
 # Possible Future Extensions and Improvements (roughly in order of priority):
 
+I'm not sure how much I will be able to work on this in the future, so nothing is guaranteed.
+
 ### High priority: index for single texts
 
 - more flexible alphabet API
