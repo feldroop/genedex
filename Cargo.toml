@@ -1,6 +1,6 @@
 [package]
 name = "genedex"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Felix Leander Droop <info@felix-droop.de>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
