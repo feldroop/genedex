@@ -11,7 +11,7 @@ use super::FmIndex;
 #[savefile_doc_hidden]
 #[derive(Clone)]
 pub struct SampledSuffixArray<I> {
-    suffix_array_bytes: Vec<u8>,
+    suffix_array_data: Vec<u32>,
     text_border_lookup: HashMap<usize, I>,
     sampling_rate: usize,
     _compression_marker: PhantomData<I>,
@@ -19,11 +19,11 @@ pub struct SampledSuffixArray<I> {
 
 impl<I: PrimInt + Pod> SampledSuffixArray<I> {
     pub(crate) fn new_uncompressed(
-        mut suffix_array_bytes: Vec<u8>,
+        mut suffix_array_data: Vec<u32>,
         sampling_rate: usize,
         text_border_lookup: HashMap<usize, I>,
     ) -> Self {
-        let suffix_array_view: &mut [I] = bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+        let suffix_array_view: &mut [I] = bytemuck::cast_slice_mut(&mut suffix_array_data);
 
         let mut num_retained_values = 0;
         let mut write_index = 0;
@@ -36,11 +36,11 @@ impl<I: PrimInt + Pod> SampledSuffixArray<I> {
             }
         }
 
-        suffix_array_bytes.truncate(num_retained_values * size_of::<I>());
-        suffix_array_bytes.shrink_to_fit();
+        suffix_array_data.truncate(num_retained_values * size_of::<I>() / size_of::<u32>());
+        suffix_array_data.shrink_to_fit();
 
         Self {
-            suffix_array_bytes,
+            suffix_array_data,
             text_border_lookup,
             sampling_rate,
             _compression_marker: PhantomData,
@@ -50,11 +50,11 @@ impl<I: PrimInt + Pod> SampledSuffixArray<I> {
 
 impl SampledSuffixArray<u32> {
     pub(crate) fn new_u32_compressed(
-        mut suffix_array_bytes: Vec<u8>,
+        mut suffix_array_data: Vec<u32>,
         sampling_rate: usize,
         text_border_lookup: HashMap<usize, u32>,
     ) -> Self {
-        let suffix_array_view: &mut [i64] = bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+        let suffix_array_view: &mut [i64] = bytemuck::cast_slice_mut(&mut suffix_array_data);
 
         let mut num_retained_values: usize = 0;
 
@@ -86,11 +86,11 @@ impl SampledSuffixArray<u32> {
             }
         }
 
-        suffix_array_bytes.truncate(num_retained_values * size_of::<u32>());
-        suffix_array_bytes.shrink_to_fit();
+        suffix_array_data.truncate(num_retained_values);
+        suffix_array_data.shrink_to_fit();
 
         Self {
-            suffix_array_bytes,
+            suffix_array_data,
             text_border_lookup,
             sampling_rate,
             _compression_marker: PhantomData,
@@ -120,7 +120,7 @@ impl<I: IndexStorage> SampledSuffixArray<I> {
                 num_steps_done = num_steps_done + I::one();
             }
 
-            let suffix_array_view: &[I] = bytemuck::cast_slice(&self.suffix_array_bytes);
+            let suffix_array_view: &[I] = bytemuck::cast_slice(&self.suffix_array_data);
 
             <usize as NumCast>::from(suffix_array_view[i / self.sampling_rate] + num_steps_done)
                 .unwrap()

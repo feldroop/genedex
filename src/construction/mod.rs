@@ -73,11 +73,12 @@ pub trait IndexStorage:
     fn construct_libsais_suffix_array(
         text: &[u8],
         frequency_table: &mut [Self::LibsaisOutput],
-    ) -> Vec<u8> {
+    ) -> Vec<u32> {
         // allocate the buffer in bytes, because maybe we want to muck around with integer types later (compress i64 into u32)
-        let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<Self::LibsaisOutput>()];
+        let mut suffix_array_data =
+            vec![0u32; text.len() * size_of::<Self::LibsaisOutput>() / size_of::<u32>()];
         let suffix_array_buffer: &mut [Self::LibsaisOutput] =
-            bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+            bytemuck::cast_slice_mut(&mut suffix_array_data);
 
         let mut construction = libsais::SuffixArrayConstruction::for_text(text)
             .in_borrowed_buffer(suffix_array_buffer)
@@ -95,7 +96,7 @@ pub trait IndexStorage:
             .run()
             .expect("libsais suffix array construction");
 
-        suffix_array_bytes
+        suffix_array_data
     }
 
     #[doc(hidden)]
@@ -109,8 +110,8 @@ pub trait IndexStorage:
         config: &FmIndexConfig<Self, R>,
         alphabet: &Alphabet,
     ) -> (SampledSuffixArray<Self>, R) {
-        let suffix_array_bytes = Self::construct_libsais_suffix_array(text, frequency_table);
-        let suffix_array_buffer: &[Self::LibsaisOutput] = bytemuck::cast_slice(&suffix_array_bytes);
+        let suffix_array_data = Self::construct_libsais_suffix_array(text, frequency_table);
+        let suffix_array_buffer: &[Self::LibsaisOutput] = bytemuck::cast_slice(&suffix_array_data);
 
         let (bwt, text_border_lookup, uncompressed_text_len) = bwt::bwt_from_suffix_array(
             suffix_array_buffer,
@@ -121,7 +122,7 @@ pub trait IndexStorage:
         );
 
         let sampled_suffix_array = Self::sample_suffix_array_maybe_u32_compressed(
-            suffix_array_bytes,
+            suffix_array_data,
             config.suffix_array_sampling_rate,
             text_border_lookup,
         );
@@ -138,11 +139,11 @@ pub trait IndexStorage:
 
     #[doc(hidden)]
     fn sample_suffix_array_maybe_u32_compressed(
-        suffix_array_bytes: Vec<u8>,
+        suffix_array_data: Vec<u32>,
         sampling_rate: usize,
         text_border_lookup: std::collections::HashMap<usize, Self>,
     ) -> SampledSuffixArray<Self> {
-        SampledSuffixArray::new_uncompressed(suffix_array_bytes, sampling_rate, text_border_lookup)
+        SampledSuffixArray::new_uncompressed(suffix_array_data, sampling_rate, text_border_lookup)
     }
 }
 
@@ -170,10 +171,9 @@ impl IndexStorage for u32 {
     ) -> (SampledSuffixArray<Self>, R) {
         let (sampled_suffix_array, bwt, uncompressed_text_len) = match config.performance_priority {
             PerformancePriority::HighSpeed | PerformancePriority::Balanced => {
-                let suffix_array_bytes =
-                    Self::construct_libsais_suffix_array(text, frequency_table);
+                let suffix_array_data = Self::construct_libsais_suffix_array(text, frequency_table);
                 let suffix_array_buffer: &[Self::LibsaisOutput] =
-                    bytemuck::cast_slice(&suffix_array_bytes);
+                    bytemuck::cast_slice(&suffix_array_data);
 
                 let (bwt, text_border_lookup, uncompressed_text_len) = bwt::bwt_from_suffix_array(
                     suffix_array_buffer,
@@ -184,7 +184,7 @@ impl IndexStorage for u32 {
                 );
 
                 let sampled_suffix_array = Self::sample_suffix_array_maybe_u32_compressed(
-                    suffix_array_bytes,
+                    suffix_array_data,
                     config.suffix_array_sampling_rate,
                     text_border_lookup,
                 );
@@ -192,13 +192,12 @@ impl IndexStorage for u32 {
                 (sampled_suffix_array, bwt, uncompressed_text_len)
             }
             PerformancePriority::LowMemory => {
-                let mut suffix_array_bytes = vec![0u8; text.len() * size_of::<Self>()];
+                let mut suffix_array_data =
+                    vec![0u32; text.len() * size_of::<Self>() / size_of::<u32>()];
                 let suffix_array_buffer: &mut [Self] =
-                    bytemuck::cast_slice_mut(&mut suffix_array_bytes);
+                    bytemuck::cast_slice_mut(&mut suffix_array_data);
 
-                sais_drum::SaisBuilder::new()
-                    .with_max_char((alphabet.num_dense_symbols() - 1) as u8)
-                    .construct_suffix_array_inplace(text, suffix_array_buffer);
+                psacak::psacak_inplace(text, suffix_array_buffer);
 
                 let (bwt, text_border_lookup, uncompressed_text_len) = bwt::bwt_from_suffix_array(
                     suffix_array_buffer,
@@ -211,7 +210,7 @@ impl IndexStorage for u32 {
                 // NOT call Self::sample_suffix_array_maybe_u32_compressed, because after using u32 sais-drum
                 // the suffix array does not need ot be compressed
                 let sampled_suffix_array = SampledSuffixArray::new_uncompressed(
-                    suffix_array_bytes,
+                    suffix_array_data,
                     config.suffix_array_sampling_rate,
                     text_border_lookup,
                 );
@@ -231,15 +230,11 @@ impl IndexStorage for u32 {
     }
 
     fn sample_suffix_array_maybe_u32_compressed(
-        suffix_array_bytes: Vec<u8>,
+        suffix_array_data: Vec<u32>,
         sampling_rate: usize,
         text_border_lookup: std::collections::HashMap<usize, Self>,
     ) -> SampledSuffixArray<Self> {
-        SampledSuffixArray::new_u32_compressed(
-            suffix_array_bytes,
-            sampling_rate,
-            text_border_lookup,
-        )
+        SampledSuffixArray::new_u32_compressed(suffix_array_data, sampling_rate, text_border_lookup)
     }
 }
 
