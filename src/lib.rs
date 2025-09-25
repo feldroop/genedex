@@ -102,7 +102,7 @@ pub struct FmIndex<I, R = CondensedTextWithRankSupport<I, Block64>> {
 /// This is the default version.
 pub type FmIndexCondensed64<I> = FmIndex<I, CondensedTextWithRankSupport<I, Block64>>;
 
-/// The most space efficient version.
+/// The most space efficient version. Currently, this is experimental and the `*64` usually provide better trade-offs.
 pub type FmIndexCondensed512<I> = FmIndex<I, CondensedTextWithRankSupport<I, Block512>>;
 
 /// The fastest version.

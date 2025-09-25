@@ -8,7 +8,9 @@ pub(crate) const NUM_BLOCK_OFFSET_BITS: usize = 16;
 ///
 /// Currently, this can either be [`Block64`] or [`Block512`], with [`Block64`] being the default.
 ///
-/// The larger blocks lead to slightly higher running times of operations, but consume less memory.
+/// The larger blocks lead to higher running times of operations, but consume slightly less memory.
+/// On machines with AVX-512, the performance of [`Block512`] might be close to the one of [`Block64`].
+///
 /// The difference in memory usage depends on the number of dense symbols of the alphabet used.
 /// For small alphabets like DNA alphabets, the difference in memory usage is almost irrelevant, so
 /// [`Block64`] is recommended.
