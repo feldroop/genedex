@@ -33,6 +33,7 @@ I'm not sure how much I will be able to work on this in the future, so nothing i
 
 ### Nice to have, but low priority
 
+- a faster `u32`-SACA to make the low memory mode less painful (would be a ton of work)
 - gate rayon/OpenMP usage behind feature flag
 - API to use batched search with cursors
 - type-erase index storage type and choose automatically for text size (does that work with savefile?)
