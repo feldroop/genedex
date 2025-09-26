@@ -74,7 +74,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> Default for FmIndexConfig<I, R>
         Self {
             suffix_array_sampling_rate: 4,
             lookup_table_depth: 8,
-            performance_priority: PerformancePriority::HighSpeed,
+            performance_priority: PerformancePriority::Balanced,
             _index_storage_marker: PhantomData,
             _block_marker: PhantomData,
         }
@@ -84,7 +84,8 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> Default for FmIndexConfig<I, R>
 /// This enum can be supplied to the [`FmIndexConfig`] to select different sub-algorithms during the
 /// construction of the FM-Index.
 ///
-/// The default is [`HighSpeed`](PerformancePriority::HighSpeed).
+/// The default is [`Balanced`](PerformancePriority::Balanced). For very large texts over small alphabets,
+/// [`Balanced`](PerformancePriority::Balanced) can actually be faster than [`HighSpeed`](PerformancePriority::HighSpeed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PerformancePriority {
     HighSpeed,
