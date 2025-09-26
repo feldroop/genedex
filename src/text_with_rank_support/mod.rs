@@ -66,7 +66,7 @@ pub(crate) trait PrivateTextWithRankSupport<I: IndexStorage>: Sealed {
     );
 }
 
-/// A trait for data structures central to the FM-Index of this library.
+/// A trait for data structures central to the FM-Index of this library. This trait should not and cannot be implemented by you.
 ///
 /// They can answer rank queries similar to the ones for bitvectors with rank support,
 /// but for a text with a given number of different symbols.

@@ -4,7 +4,7 @@ pub(crate) const NUM_BLOCK_OFFSET_BITS: usize = 16;
 
 // this distinction of block types only exists to be able to set repr(align(64)) for the 512 bit block
 
-/// The block configurations used internally by data structures of this library.
+/// The block configurations used internally by data structures of this library. This trait should not and cannot be implemented by you.
 ///
 /// Currently, this can either be [`Block64`] or [`Block512`], with [`Block64`] being the default.
 ///
