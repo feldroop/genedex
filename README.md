@@ -45,7 +45,15 @@ for hit in index.locate(query) {
 
 ## Comparison to Other Crates and Benchmarks
 
-Work in progress. Can be found [here](https://github.com/feldroop/rust-fmindex-benchmark)
+A thorough comparison of all available Rust implementations of the FM-Index can be found [here](https://github.com/feldroop/rust-fmindex-benchmark). The main benchmark results are shown below.
+
+Running time and peak memory usage of constructing the FM-Index for the human reference genome hg38 using different implementations and configurations:
+
+<img src="https://raw.githubusercontent.com/feldroop/rust-fmindex-benchmark/refs/heads/main/plots/img/Construction-Hg38.svg" />
+
+Running time and index memory usage of searching 377 MB of queries of length 50 in this index using the `locate` function:
+
+<img src="https://raw.githubusercontent.com/feldroop/rust-fmindex-benchmark/refs/heads/main/plots/img/Locate-Hg38.svg" />
 
 [FM-Index]: https://doi.org/10.1109/SFCS.2000.892127
 [`libsais-rs`]: https://github.com/feldroop/libsais-rs
