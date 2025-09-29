@@ -1,3 +1,6 @@
+// the idea of the slice compression is that if the alphabet size is 16 or smaller,
+// the text can easily be compressed into half its size, such that the BWT can be written
+// to the remaining half of the buffer. This is used in the balanced construction memory mode.
 pub(crate) trait SliceCompression {
     fn get(idx: usize, slice: &[u8]) -> u8;
 

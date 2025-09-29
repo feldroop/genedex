@@ -1,4 +1,5 @@
-// static binary search tree, heap-like memory layout in flat array
+// static binary search tree, heap-like memory layout in flat array.
+// Probably over-engineered and not performance relevant, but it was fun to implement.
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone)]
 pub(crate) struct TexdIdSearchTree {

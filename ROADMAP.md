@@ -23,6 +23,7 @@ I'm not sure how much I will be able to work on this in the future, so nothing i
     should be investigated further, maybe it can be optimized or it's a measuring error.
 - the batching of search queries could be improved. Currenty, it is not efficent if the queries have very different lengths
     or if many of them quickly get an empty interval, while others need ot be searched to the very end.
+- the batched rank function could also be optimized using const currying and other techniques
 - functionality to directly retrieve maximal exact matches 
 - more documentation tests
 

@@ -11,6 +11,8 @@ use crate::{
 // because the smaller tables require only a fraction of the memory of the larger tables,
 // can speed up short queries and make the lookup table build process simple and efficient by iteratively
 // constructing lookup tables for larger suffixes up to max depth
+
+// using I as storage and not simply usize saves space if I is a 32 bit int (and usize is 64 bit)
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone)]
 pub(crate) struct LookupTables<I> {
@@ -19,6 +21,7 @@ pub(crate) struct LookupTables<I> {
     tables: Vec<LookupTable<I>>,
 }
 
+// expands to a large match statement that performs the const currying technique.
 // there is a crate for this, but it seems to be unmaintained and experimental
 macro_rules! const_curry_match {
     ($n:ident, $query_suffix:ident, $self:ident, $alphabet:ident, $($i:literal),*) => {
@@ -64,8 +67,9 @@ impl<I: IndexStorage> LookupTables<I> {
     pub(crate) fn compute_lookup_idx(&self, query_suffix: &[u8], alphabet: &Alphabet) -> usize {
         let n = query_suffix.len();
 
-        // a little "const currying" optimization technique, because this function actually showed
-        // up taking a significant amount of running time in the flamegraph. it actually gave a little improvement
+        // a "const currying" optimization technique, because this function actually showed
+        // up taking a significant amount of running time in the flamegraph.
+        // using this actually lead to a small improvement
         const_curry_match!(
             n,
             query_suffix,
@@ -90,6 +94,7 @@ impl<I: IndexStorage> LookupTables<I> {
         )
     }
 
+    // fallback function for the const curried function compute_lookup_idx
     pub(crate) fn compute_lookup_idx_dynamic_len(
         &self,
         query_suffix: &[u8],
@@ -120,7 +125,7 @@ impl<I: IndexStorage> LookupTables<I> {
         idx
     }
 
-    // gives false positive error for now
+    // rust analyzer gives false positive error for now
     #[rust_analyzer::skip]
     pub(crate) fn lookup_idx_many(
         &self,
@@ -157,8 +162,8 @@ pub(crate) fn compute_lookup_idx_static_len<const N: usize>(
 pub(crate) fn fill_lookup_tables<I: IndexStorage, R: TextWithRankSupport<I>>(
     index: &mut FmIndex<I, R>,
     max_depth: usize,
-    num_symbols: usize,
 ) {
+    let num_symbols = index.alphabet.num_searchable_dense_symbols();
     index.lookup_tables.num_symbols = num_symbols;
 
     index.lookup_tables.factors = (0..=max_depth)

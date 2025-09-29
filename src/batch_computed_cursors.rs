@@ -2,6 +2,12 @@ use crate::{
     Cursor, FmIndex, HalfOpenInterval, IndexStorage, text_with_rank_support::TextWithRankSupport,
 };
 
+// the idea of this is to perform multiple LF-Mapping steps simultaneously for improved performance.
+// since the normal implementation is likely memory-bound, this way of batching could make use of
+// parallel fetching of memory addresses by modern CPUs. It lead to an improvement, but not as much as hoped.
+// On my laptop, it was about 2x, on the linux server it was even less effective. This likely happened
+// because the performance profile of the program completely changed and now suddenly there actually exist
+// CPU-bound bottlenecks that could be improved in the future (see roadmap).
 pub(crate) struct BatchComputedCursors<'a, I, R, Q, const N: usize> {
     index: &'a FmIndex<I, R>,
     next_idx_in_batch: usize,
@@ -30,6 +36,7 @@ where
         self.next_idx_in_batch = 0;
         self.curr_batch_size = 0;
 
+        // pull queries from iterator
         while self.curr_batch_size < N
             && let Some(query) = self.queries_iter.next()
         {

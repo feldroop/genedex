@@ -126,8 +126,6 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
             text_with_rank_support,
         } = construction::create_data_structures::<I, R, T>(texts, &config, &alphabet);
 
-        let num_searchable_dense_symbols = alphabet.num_searchable_dense_symbols();
-
         let mut index = FmIndex {
             alphabet,
             count,
@@ -137,11 +135,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
             lookup_tables: LookupTables::new_empty(),
         };
 
-        lookup_table::fill_lookup_tables(
-            &mut index,
-            config.lookup_table_depth,
-            num_searchable_dense_symbols,
-        );
+        lookup_table::fill_lookup_tables(&mut index, config.lookup_table_depth);
 
         index
     }

@@ -7,6 +7,10 @@ use crate::{IndexStorage, text_with_rank_support::TextWithRankSupport};
 
 use super::FmIndex;
 
+// this is a simple implementation of the sampled suffix array, using suffix array based sampling.
+// the suffix array data is stored in a u32 array, because there is an optimization for the case
+// where the text length fits into a u32, but not a i32. There is not u32 version of libsais, so
+// we convert the i64 into u32 after construction (new_u32_compressed).
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[savefile_doc_hidden]
 #[derive(Clone)]
@@ -18,6 +22,7 @@ pub struct SampledSuffixArray<I> {
 }
 
 impl<I: PrimInt + Pod> SampledSuffixArray<I> {
+    // uncompressed means not the special case of u32 compression
     pub(crate) fn new_uncompressed(
         mut suffix_array_data: Vec<u32>,
         sampling_rate: usize,
@@ -61,6 +66,8 @@ impl SampledSuffixArray<u32> {
         let mut write_index = 0;
         let mut next_write_is_little_half = true;
 
+        // maybe shifting would be a simpler solution than this dance with *_le_bytes.
+        // but it works now I don't want to change it.
         for i in 0..suffix_array_view.len() {
             if i % sampling_rate == 0 {
                 let read_entry_bytes = suffix_array_view[i].to_le_bytes();
@@ -110,6 +117,8 @@ impl<I: IndexStorage> SampledSuffixArray<I> {
             while i % self.sampling_rate != 0 {
                 let bwt_symbol = index.text_with_rank_support.symbol_at(i);
 
+                // this special case is needed, because the implicit sentinel of the libsais suffix array
+                // breaks the rank preservation property of the FM-Index.
                 if bwt_symbol == 0 {
                     return <usize as NumCast>::from(self.text_border_lookup[&i] + num_steps_done)
                         .unwrap();

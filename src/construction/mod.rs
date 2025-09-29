@@ -25,6 +25,7 @@ pub(crate) fn create_data_structures<I: IndexStorage, R: TextWithRankSupport<I>,
     config: &FmIndexConfig<I, R>,
     alphabet: &Alphabet,
 ) -> DataStructures<I, R> {
+    // the frequency table is used for libsais, and turned into the count data structure of the fmindex
     let (mut text, mut frequency_table, sentinel_indices) =
         create_concatenated_densely_encoded_text(texts, alphabet);
 
@@ -63,6 +64,8 @@ pub(crate) fn create_data_structures<I: IndexStorage, R: TextWithRankSupport<I>,
 /// `u32`, so it uses as much memory as `i64` during construction.
 ///
 /// For example, to index the 3.3 GB large human genome, `u32` would be the best solution.
+// it's not nice that all of these functions are public, because I consider them implementation details.
+// but changing this would involve some effort and it doesn't seem worth it for now.
 pub trait IndexStorage:
     PrimInt + Pod + maybe_savefile::MaybeSavefile + sealed::Sealed + Send + Sync + 'static
 {
@@ -88,6 +91,7 @@ pub trait IndexStorage:
                     .expect("Number of threads should fit into u16"),
             ));
 
+        // SAFETY: the frequency table is correct, because it was created in an earlier function to be used here
         unsafe {
             construction = construction.with_frequency_table(frequency_table);
         }
@@ -155,6 +159,7 @@ impl IndexStorage for i32 {
 
 impl sealed::Sealed for u32 {}
 
+// special handling for u32: use psacak in low memory mode, use libsasi64 and u32 compression otherwise
 impl IndexStorage for u32 {
     type LibsaisOutput = i64;
 
@@ -244,6 +249,7 @@ impl IndexStorage for i64 {
     type LibsaisOutput = i64;
 }
 
+// making this parallel is hilarious premature optimization, but it was fun
 pub(crate) fn create_concatenated_densely_encoded_text<I: OutputElement, T: AsRef<[u8]>>(
     texts: impl IntoIterator<Item = T>,
     alphabet: &Alphabet,

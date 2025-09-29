@@ -20,7 +20,7 @@ pub use condensed::CondensedTextWithRankSupport;
 #[doc(inline)]
 pub use flat::FlatTextWithRankSupport;
 
-// these specific optimization are not something I want to expose to the public API, for now
+// these specific optimizations are not something I want to expose to the public API, for now
 pub(crate) trait PrivateTextWithRankSupport<I: IndexStorage>: Sealed {
     fn construct_from_maybe_slice_compressed_text<S: SliceCompression>(
         text: &[u8],
