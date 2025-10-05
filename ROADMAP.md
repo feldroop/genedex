@@ -1,16 +1,8 @@
-# Possible Future Extensions and Improvements (roughly in order of priority):
+# Possible Future Extensions and Improvements:
 
-I'm not sure how much I will be able to work on this in the future, so nothing is guaranteed.
+I'm not sure how much I will be able to work on this in the future, so nothing is guaranteed. Also, I believe in YAGNI and won't implement a lot of this unless I hear from anyone who wants to actually use `genedex`. I you want to use the library, but are missing a specific feature, I'd be happy to hear from you and will give the missing feature a high priority.
 
-### High priority: index for single texts
-
-- more flexible alphabet API
-    - allow alphabet with sentinel included in io representation
-    - allow alphabet without sentinel (only usable for single text indexing)
-- optimized version for single text without sentinel
-- optimized construction directly from (fasta) file reader
-
-### Nice to have, higher priority
+### Optimizations for existing features
 
 - space optimization for rarely occurring symbols (such as the sentinel and N in the human Genome)
     - maybe leverage the fact that such characters (namely N) often occur in runs
@@ -24,30 +16,31 @@ I'm not sure how much I will be able to work on this in the future, so nothing i
 - the batching of search queries could be improved. Currenty, it is not efficent if the queries have very different lengths
     or if many of them quickly get an empty interval, while others need ot be searched to the very end.
 - the batched rank function could also be optimized using const currying and other techniques
-- functionality to directly retrieve maximal exact matches 
+- a faster `u32`-SACA to make the low memory mode less painful (`sais-drum` is a start, but optimizing it would be a lot of work)
+- suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
+
+### Smaller new features
+
+- more flexible alphabet API
+    - allow alphabet with sentinel included in io representation
+    - allow alphabet without sentinel (only usable for single text indexing)
+- optimized version for single text without sentinel
+- functionality to directly retrieve maximal exact matches (MEMs/SMEMs)
 - more documentation tests
-
-### Large topics, is the goal to eventually support
-
-- bidirectional FM-Index
-- searches with errors and "degenerate" chars in IUPAC fasta definition (using search schemes)
-
-### Nice to have, but low priority
-
-- a faster `u32`-SACA to make the low memory mode less painful (would be a ton of work)
 - gate rayon/OpenMP usage behind feature flag
 - API to use batched search with cursors
 - type-erase index storage type and choose automatically for text size (does that work with savefile?)
+- bidirectional FM-Index
+- optimizations for highly repetitive texts such as run length encoding (r-index)
 - optional functionality for text recovery
 - text sampled suffix array (with text ids and optionally other annotations)
-- suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
 - optimized functions for reading directly from input files: both for texts to build the index and queries to search.
     the latter might be more important, because for simple searches, the search can be faster than reading the 
     queries from disk.
 
-### Large topics, might never happen
+### Larger new features, might never happen
 
+- searches with errors and "degenerate" chars in IUPAC fasta definition (using search schemes, needs bidirectional FM-Index)
 - FMD-Index
 - word-based FM-Indices
-- optimizations for highly repetitive texts such as run length encoding (r-index)
 - ropeBWT/dynamic FM-Index
