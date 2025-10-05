@@ -4,21 +4,21 @@
 [![Crates.io](https://img.shields.io/crates/v/genedex.svg?style=flat-square&logo=rust)](https://crates.io/crates/genedex)
 [![Documentation](https://img.shields.io/docsrs/genedex?style=flat-square&logo=rust)](https://docs.rs/genedex)
 
+⚠️ **Warning:** this library is in an early stage. The API is still subject to changes. Currently, only a basic FM-Index is implemented. For upcoming features, take a look at the [roadmap]. Any kind of feedback and suggestions via the issue tracker is highly appreciated! ⚠️
+
 The [FM-Index] is a full-text index data structure that allows efficiently counting and retrieving the positions of all occurrenes of (typically short) sequences in very large texts. It is widely used in sequence analysis and bioinformatics.
 
 The implementation of this library is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
 by Simon Gene Gottlieb, who also was a great help while developing the library. This data structure is central to the inner workings of
 the FM-Index. The encoding attemps to provide a good trade-off between memory usage and running time of queries. 
-A second, faster and less memory efficient encoding is also implemented in this library. Further benefits of `genedex` include:
+A second, faster and less memory efficient encoding is also implemented. Further benefits of `genedex` include:
 
 - Fast, parallel and memory efficient index construction by leveraging [`libsais-rs`] and [`rayon`].
 - Support for indexing a set of texts, like chromosomes of a genome.
-- Optimized functions for searching multiple queries at once (per thread, this is not multithreading).
 - A flexible cursor API.
 - Fast reading and writing the FM-Index from/to files, using [`savefile`].
 - Thoroughly tested using [`proptest`].
-
-⚠️ **Warning:** this library is in an early stage. The API is still subject to changes. Currently, only a basic FM-Index is implemented. For upcoming features, take a look at the [roadmap]. Any kind of feedback and suggestions via the issue tracker is highly appreciated! ⚠️
+- Experimental, optimized functions for searching multiple queries at once. This is not multithreading. It batches searches on a single thread to leverage SIMD and saturate (multichannel) RAM bandwidth.
 
 ## Usage
 
