@@ -245,9 +245,7 @@ fn run_queries<I: IndexStorage>(
         assert!(many_results.contains(hit));
     }
 
-    let random_many: Vec<_> = index
-        .locate_many(random_queries.iter().map(|q| q.as_slice()))
-        .collect();
+    let random_many: Vec<_> = index.locate_many(random_queries).collect();
     assert_eq!(random_many.len(), random_queries.len());
 
     for ((query, naive_results), many_results) in random_queries

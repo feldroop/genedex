@@ -151,9 +151,9 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     ///
     /// The order of the queries is preserved for the counts. This function can improve the running
     /// time when many queries are searched.
-    pub fn count_many<'a>(
-        &'a self,
-        queries: impl IntoIterator<Item = &'a [u8]>,
+    pub fn count_many<Q: AsRef<[u8]>>(
+        &self,
+        queries: impl IntoIterator<Item = Q>,
     ) -> impl Iterator<Item = usize> {
         self.cursors_for_many_queries(queries)
             .map(|cursor| cursor.count())
@@ -175,9 +175,9 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     ///
     /// The order of the queries is preserved for the hits. This function can improve the running
     /// time when many queries are searched.
-    pub fn locate_many<'a>(
-        &'a self,
-        queries: impl IntoIterator<Item = &'a [u8]>,
+    pub fn locate_many<Q: AsRef<[u8]>>(
+        &self,
+        queries: impl IntoIterator<Item = Q>,
     ) -> impl Iterator<Item: Iterator<Item = Hit>> {
         self.cursors_for_many_queries(queries)
             .map(|cursor| self.locate_interval(cursor.interval()))
@@ -237,11 +237,11 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndex<I, R> {
     ///
     /// The order of the queries is preserved for the cursors. This function can improve the running
     /// time when many queries are searched.
-    pub fn cursors_for_many_queries<'a>(
+    pub fn cursors_for_many_queries<'a, Q: AsRef<[u8]>>(
         &'a self,
-        queries: impl IntoIterator<Item = &'a [u8]>,
+        queries: impl IntoIterator<Item = Q>,
     ) -> impl Iterator<Item = Cursor<'a, I, R>> {
-        BatchComputedCursors::<I, R, _, BATCH_SIZE>::new(self, queries.into_iter())
+        BatchComputedCursors::<I, R, Q, _, BATCH_SIZE>::new(self, queries.into_iter())
     }
 
     fn cursor_for_query_without_alphabet_translation<'a>(

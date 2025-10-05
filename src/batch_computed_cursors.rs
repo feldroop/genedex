@@ -8,21 +8,22 @@ use crate::{
 // On my laptop, it was about 2x, on the linux server it was even less effective. This likely happened
 // because the performance profile of the program completely changed and now suddenly there actually exist
 // CPU-bound bottlenecks that could be improved in the future (see roadmap).
-pub(crate) struct BatchComputedCursors<'a, I, R, Q, const N: usize> {
+pub(crate) struct BatchComputedCursors<'a, I, R, Q, QS, const N: usize> {
     index: &'a FmIndex<I, R>,
     next_idx_in_batch: usize,
     curr_batch_size: usize,
-    queries_iter: Q,
-    buffers: Buffers<'a, N>,
+    queries_iter: QS,
+    buffers: Buffers<Q, N>,
 }
 
-impl<'a, I, R, Q, const N: usize> BatchComputedCursors<'a, I, R, Q, N>
+impl<'a, I, R, Q, QS, const N: usize> BatchComputedCursors<'a, I, R, Q, QS, N>
 where
     I: IndexStorage,
     R: TextWithRankSupport<I>,
-    Q: Iterator<Item = &'a [u8]>,
+    QS: Iterator<Item = Q>,
+    Q: AsRef<[u8]>,
 {
-    pub(crate) fn new(index: &'a FmIndex<I, R>, queries_iter: Q) -> Self {
+    pub(crate) fn new(index: &'a FmIndex<I, R>, queries_iter: QS) -> Self {
         Self {
             index,
             next_idx_in_batch: 0,
@@ -75,8 +76,8 @@ where
         let depths = &mut self.buffers.buffer1[..self.curr_batch_size];
         let idxs = &mut self.buffers.buffer2[..self.curr_batch_size];
 
-        for ((&query, depth), idx) in self.buffers.queries.iter().zip(depths).zip(idxs) {
-            let query = query.unwrap();
+        for ((query, depth), idx) in self.buffers.queries.iter().zip(depths).zip(idxs) {
+            let query = query.as_ref().unwrap().as_ref();
             *depth = std::cmp::min(query.len(), self.index.lookup_tables.max_depth());
             let suffix_idx = query.len() - *depth;
 
@@ -99,12 +100,11 @@ where
         next_idx_in_queries: usize,
         num_remaining_unfinished_queries: usize,
     ) {
-        let queries: &[Option<&'a [u8]>] =
-            &self.buffers.queries[..num_remaining_unfinished_queries];
+        let queries = &self.buffers.queries[..num_remaining_unfinished_queries];
         let symbols = &mut self.buffers.symbols[..num_remaining_unfinished_queries];
 
         for (query, symbol) in queries.iter().zip(symbols) {
-            let query = query.unwrap();
+            let query = query.as_ref().unwrap().as_ref();
             let rev_idx = query.len() - next_idx_in_queries - 1;
             *symbol = self
                 .index
@@ -138,8 +138,8 @@ where
         while i < *num_remaining_unfinished_queries {
             let interval = self.buffers.intervals[i];
 
-            if let Some(query) = self.buffers.queries[i]
-                && query.len() > next_idx_in_queries
+            if let Some(query) = self.buffers.queries[i].as_ref()
+                && query.as_ref().len() > next_idx_in_queries
                 && interval.start != interval.end
             {
                 // query is unfinished
@@ -172,11 +172,12 @@ where
     }
 }
 
-impl<'a, I, R, Q, const N: usize> Iterator for BatchComputedCursors<'a, I, R, Q, N>
+impl<'a, I, R, Q, QS, const N: usize> Iterator for BatchComputedCursors<'a, I, R, Q, QS, N>
 where
     I: IndexStorage,
     R: TextWithRankSupport<I>,
-    Q: Iterator<Item = &'a [u8]>,
+    QS: Iterator<Item = Q>,
+    Q: AsRef<[u8]>,
 {
     type Item = Cursor<'a, I, R>;
 
@@ -197,9 +198,10 @@ where
     }
 }
 
-pub(crate) struct Buffers<'a, const N: usize> {
+// the 4 buffers are used to store different values throughout the batched search
+pub(crate) struct Buffers<Q, const N: usize> {
     pub(crate) intervals: [HalfOpenInterval; N],
-    queries: [Option<&'a [u8]>; N],
+    queries: [Option<Q>; N],
     query_at_idx: [usize; N],
     pub(crate) symbols: [u8; N],
     pub(crate) buffer1: [usize; N],
@@ -208,10 +210,10 @@ pub(crate) struct Buffers<'a, const N: usize> {
     pub(crate) buffer4: [usize; N],
 }
 
-impl<'a, const N: usize> Buffers<'a, N> {
+impl<Q, const N: usize> Buffers<Q, N> {
     pub(crate) fn new() -> Self {
         let intervals = [HalfOpenInterval { start: 0, end: 0 }; N];
-        let queries = [None; N];
+        let queries = std::array::from_fn(|_| None);
         let query_at_idx = [0; N];
         let symbols = [0; N];
         let buffer1 = [0; N];

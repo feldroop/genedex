@@ -32,9 +32,9 @@ pub(crate) trait PrivateTextWithRankSupport<I: IndexStorage>: Sealed {
 
     fn _text_len(&self) -> usize;
 
-    fn replace_many_interval_borders_with_ranks<const N: usize>(
+    fn replace_many_interval_borders_with_ranks<Q, const N: usize>(
         &self,
-        buffers: &mut Buffers<N>,
+        buffers: &mut Buffers<Q, N>,
         num_remaining_unfinished_queries: usize,
     ) {
         let all_symbols_valid = buffers
@@ -59,9 +59,9 @@ pub(crate) trait PrivateTextWithRankSupport<I: IndexStorage>: Sealed {
     }
 
     // SAFETY: the symbols must be smaller than the alphabet size and the indices must not be greater than the text len
-    unsafe fn replace_many_interval_borders_with_ranks_unchecked<const N: usize>(
+    unsafe fn replace_many_interval_borders_with_ranks_unchecked<Q, const N: usize>(
         &self,
-        buffers: &mut Buffers<N>,
+        buffers: &mut Buffers<Q, N>,
         num_remaining_unfinished_queries: usize,
     );
 }
@@ -213,7 +213,7 @@ mod tests {
                 interval.end = ranks.rank(symbol, interval.end);
             }
 
-            let mut buffers = Buffers::new();
+            let mut buffers = Buffers::<Vec<u8>, _>::new();
             buffers.intervals = intervals;
             buffers.symbols = symbols;
 

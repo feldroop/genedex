@@ -131,9 +131,9 @@ impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
     // TODO: maybe refactor this to get rid of all of the doubling for start and end of intervals
     // this functions essentially does the same thing as Self::rank_unchecked for all of the
     // intervals border in the buffers struct
-    unsafe fn replace_many_interval_borders_with_ranks_unchecked<const N: usize>(
+    unsafe fn replace_many_interval_borders_with_ranks_unchecked<Q, const N: usize>(
         &self,
-        buffers: &mut Buffers<N>,
+        buffers: &mut Buffers<Q, N>,
         num_remaining_unfinished_queries: usize,
     ) {
         // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
