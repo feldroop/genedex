@@ -35,7 +35,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> FmIndexConfig<I, R> {
 
     /// The FM-Index stores a lookup table to skip the first `lookup_table_depth` many search steps
     /// when searching a query. The size of the lookup table grows exponentially in its depth,
-    /// with the number of searchable alphabet symbols as base. The default is `8`.
+    /// with the number of searchable alphabet symbols as base. The default is `0`.
     ///
     /// For large texts like genomes and small alphabets like DNA alphabets with 4 searchable symbols,
     /// values up to around `13` might be reasonable choices.
@@ -73,7 +73,7 @@ impl<I: IndexStorage, R: TextWithRankSupport<I>> Default for FmIndexConfig<I, R>
     fn default() -> Self {
         Self {
             suffix_array_sampling_rate: 4,
-            lookup_table_depth: 8,
+            lookup_table_depth: 0,
             performance_priority: PerformancePriority::Balanced,
             _index_storage_marker: PhantomData,
             _block_marker: PhantomData,
