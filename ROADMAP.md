@@ -2,6 +2,10 @@
 
 I'm not sure how much I will be able to work on this in the future, so nothing is guaranteed. I won't implement a lot of this unless I hear from anyone who wants to actually use `genedex`. If you want to use the library, but are missing a specific feature, I'd be happy to hear from you and will give the missing feature a high priority.
 
+### Next Milestones (High Priority)
+
+- functionality to efficiently compute maximal exact matches (MEMs/SMEMs), FMD-Index. See https://github.com/feldroop/genedex/issues/1
+
 ### Optimizations for Existing Features
 
 - paired blocks for improved memory usage when using larger alphabets
@@ -25,7 +29,6 @@ I'm not sure how much I will be able to work on this in the future, so nothing i
 
 ### Large New Features
 
-- functionality to directly retrieve maximal exact matches (MEMs/SMEMs), FMD-Index
 - bidirectional FM-Index
 - searches with errors and "degenerate" chars in IUPAC fasta definition (using search schemes, needs bidirectional FM-Index)
 - optimizations for highly repetitive texts such as run length encoding (r-index). This would be simpler, but much less useful than a ropeBWT-based FM-Index
