@@ -16,7 +16,7 @@ I'm not sure how much I will be able to work on this in the future, so nothing i
 - the batched rank function could also be optimized using const currying and other techniques
 - a faster `u32`-SACA to make the low memory mode less painful (`sais-drum` is a start, but optimizing it would be a lot of work)
 - suffix array, lookup table compression using unconventional int widths (e.g. 33 bit)
-
+- investigate large space usage of u8_until alphabet (https://github.com/RagnarGrootKoerkamp/quadrank)
 ### Small New Features/Tweaks
 
 - gate rayon/OpenMP usage behind feature flag
