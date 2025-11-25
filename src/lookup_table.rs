@@ -13,6 +13,7 @@ use crate::{
 // constructing lookup tables for larger suffixes up to max depth
 
 // using I as storage and not simply usize saves space if I is a 32 bit int (and usize is 64 bit)
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone)]
 pub(crate) struct LookupTables<I> {
@@ -179,6 +180,7 @@ pub(crate) fn fill_lookup_tables<I: IndexStorage, R: TextWithRankSupport<I>>(
     }
 }
 
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone)]
 struct LookupTable<I> {

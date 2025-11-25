@@ -11,8 +11,9 @@ use super::FmIndex;
 // the suffix array data is stored in a u32 array, because there is an optimization for the case
 // where the text length fits into a u32, but not a i32. There is not u32 version of libsais, so
 // we convert the i64 into u32 after construction (new_u32_compressed).
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[savefile_doc_hidden]
+#[cfg_attr(feature = "savefile", savefile_doc_hidden)]
 #[derive(Clone)]
 pub struct SampledSuffixArray<I> {
     suffix_array_data: Vec<u32>,

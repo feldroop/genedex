@@ -1,6 +1,7 @@
 use crate::IndexStorage;
 use crate::batch_computed_cursors::Buffers;
 use crate::construction::slice_compression::SliceCompression;
+use crate::maybe_mem_dbg::MaybeMemDbg;
 use crate::maybe_savefile::MaybeSavefile;
 use crate::sealed::Sealed;
 
@@ -19,8 +20,9 @@ use rayon::prelude::*;
 // the block offsets in the bitvectors.
 
 /// The faster implementation of [`TextWithRankSupport`].
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[savefile_doc_hidden]
+#[cfg_attr(feature = "savefile", savefile_doc_hidden)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlatTextWithRankSupport<I, B = Block64> {
     text_len: usize,
@@ -47,6 +49,8 @@ impl<I: IndexStorage, B: Block> FlatTextWithRankSupport<I, B> {
         idx % used_bits_per_block
     }
 }
+
+impl<I: IndexStorage, B: Block> MaybeMemDbg for FlatTextWithRankSupport<I, B> {}
 
 impl<I: IndexStorage, B: Block> MaybeSavefile for FlatTextWithRankSupport<I, B> {}
 

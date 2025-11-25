@@ -2,8 +2,8 @@ use std::ops::Range;
 
 use crate::{
     IndexStorage, TextWithRankSupport, batch_computed_cursors::Buffers,
-    construction::slice_compression::SliceCompression, maybe_savefile::MaybeSavefile,
-    sealed::Sealed,
+    construction::slice_compression::SliceCompression, maybe_mem_dbg::MaybeMemDbg,
+    maybe_savefile::MaybeSavefile, sealed::Sealed,
 };
 
 use super::block::{Block, Block64};
@@ -17,8 +17,9 @@ use rayon::prelude::*;
 // (Super)block offsets are only interleaved for faster (parallel) construction.
 
 /// The more memory-efficient implementation of [`TextWithRankSupport`].
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[savefile_doc_hidden]
+#[cfg_attr(feature = "savefile", savefile_doc_hidden)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CondensedTextWithRankSupport<I, B = Block64> {
     text_len: usize,
@@ -45,6 +46,8 @@ impl<I: IndexStorage, B: Block> CondensedTextWithRankSupport<I, B> {
         interleaved_blocks_start..interleaved_blocks_end
     }
 }
+
+impl<I: IndexStorage, B: Block> MaybeMemDbg for CondensedTextWithRankSupport<I, B> {}
 
 impl<I: IndexStorage, B: Block> MaybeSavefile for CondensedTextWithRankSupport<I, B> {}
 

@@ -17,8 +17,9 @@ use std::{borrow::Borrow, collections::HashSet};
 ///
 /// Many commonly used alphabets are provided by this library and can be found [here](self). Examples of how to define a custom alphabet
 /// can be found [here](https://github.com/feldroop/genedex/blob/master/examples/custom_alphabet.rs).
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[savefile_doc_hidden]
+#[cfg_attr(feature = "savefile", savefile_doc_hidden)]
 #[derive(Clone, PartialEq, Eq)]
 pub struct Alphabet {
     io_to_dense_representation_table: Vec<u8>,

@@ -2,7 +2,8 @@ use crate::{
     IndexStorage,
     batch_computed_cursors::Buffers,
     construction::slice_compression::{NoSliceCompression, SliceCompression},
-    maybe_savefile,
+    maybe_mem_dbg::MaybeMemDbg,
+    maybe_savefile::MaybeSavefile,
     sealed::Sealed,
 };
 
@@ -85,7 +86,7 @@ pub(crate) trait PrivateTextWithRankSupport<I: IndexStorage>: Sealed {
 // I don't want to make the slice compression API public
 #[allow(private_bounds)]
 pub trait TextWithRankSupport<I: IndexStorage>:
-    maybe_savefile::MaybeSavefile + PrivateTextWithRankSupport<I> + 'static
+    MaybeSavefile + MaybeMemDbg + PrivateTextWithRankSupport<I> + 'static
 {
     /// Construct the data structure for the given text.
     ///

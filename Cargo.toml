@@ -30,6 +30,7 @@ psacak = { version = "0.1", optional = true }
 rayon = "1.11"
 
 savefile = { version = "0.20.1", optional = true, features = ["derive"] }
+mem_dbg = { version = "0.3", optional = true }
 
 [dev-dependencies]
 proptest = "1.6.0"
@@ -40,6 +41,7 @@ rand_chacha = "0.9.0"
 default = ["savefile", "u32-saca"]
 savefile = ["dep:savefile"]
 u32-saca = ["psacak"]
+mem_dbg = ["dep:mem_dbg"]
 
 # optimize code for faster proptesting (needs to be removed when debugging tests)
 [profile.test]

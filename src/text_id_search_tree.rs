@@ -1,5 +1,6 @@
 // static binary search tree, heap-like memory layout in flat array.
 // Probably over-engineered and not performance relevant, but it was fun to implement.
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone)]
 pub(crate) struct TexdIdSearchTree {
@@ -118,6 +119,8 @@ fn right_child_index(curr_node_index: usize) -> usize {
 // this encodes the threshold as a positive value and a text id as its bit flipped (negative) value
 // this is a space optimization meant to improve speed by making the structure as small and cache-friendly
 // as possible
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
+#[cfg_attr(feature = "mem_dbg", copy_type)]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
 #[derive(Debug, Clone, Copy)]
 struct Node {

@@ -9,9 +9,11 @@ use rayon::prelude::*;
 use crate::alphabet::Alphabet;
 use crate::config::PerformancePriority;
 use crate::construction::slice_compression::{HalfBytesCompression, NoSliceCompression};
+use crate::maybe_mem_dbg::MaybeMemDbgCopy;
+use crate::maybe_savefile::MaybeSavefile;
 use crate::sampled_suffix_array::SampledSuffixArray;
 use crate::text_id_search_tree::TexdIdSearchTree;
-use crate::{FmIndexConfig, TextWithRankSupport, maybe_savefile, sealed};
+use crate::{FmIndexConfig, TextWithRankSupport, sealed};
 
 pub(crate) struct DataStructures<I, R> {
     pub(crate) count: Vec<usize>,
@@ -67,7 +69,7 @@ pub(crate) fn create_data_structures<I: IndexStorage, R: TextWithRankSupport<I>,
 // it's not nice that all of these functions are public, because I consider them implementation details.
 // but changing this would involve some effort and it doesn't seem worth it for now.
 pub trait IndexStorage:
-    PrimInt + Pod + maybe_savefile::MaybeSavefile + sealed::Sealed + Send + Sync + 'static
+    PrimInt + Pod + MaybeSavefile + MaybeMemDbgCopy + sealed::Sealed + Send + Sync + 'static
 {
     #[doc(hidden)]
     type LibsaisOutput: OutputElement + IndexStorage;

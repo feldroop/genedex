@@ -1,4 +1,4 @@
-use crate::{maybe_savefile::MaybeSavefile, sealed};
+use crate::{maybe_mem_dbg::MaybeMemDbgCopy, maybe_savefile::MaybeSavefile, sealed};
 
 pub(crate) const NUM_BLOCK_OFFSET_BITS: usize = 16;
 
@@ -15,7 +15,15 @@ pub(crate) const NUM_BLOCK_OFFSET_BITS: usize = 16;
 /// For small alphabets like DNA alphabets, the difference in memory usage is almost irrelevant, so
 /// [`Block64`] is recommended.
 pub trait Block:
-    sealed::Sealed + std::fmt::Debug + Clone + Copy + Send + Sync + MaybeSavefile + 'static
+    sealed::Sealed
+    + std::fmt::Debug
+    + Clone
+    + Copy
+    + Send
+    + Sync
+    + MaybeSavefile
+    + MaybeMemDbgCopy
+    + 'static
 {
     #[doc(hidden)]
     const NUM_BITS: usize;
@@ -50,8 +58,10 @@ pub trait Block:
 }
 
 /// Larger blocks, recommended for alphabets with many dense symbols.
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
+#[cfg_attr(feature = "mem_dbg", copy_type)]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[savefile_doc_hidden]
+#[cfg_attr(feature = "savefile", savefile_doc_hidden)]
 #[derive(Debug, Clone, Copy)]
 #[repr(align(64))]
 pub struct Block512 {
@@ -59,6 +69,8 @@ pub struct Block512 {
 }
 
 impl sealed::Sealed for Block512 {}
+
+impl MaybeMemDbgCopy for Block512 {}
 
 impl MaybeSavefile for Block512 {}
 
@@ -122,14 +134,18 @@ impl Block for Block512 {
 }
 
 /// Smaller blocks, recommended for alphabets with fewer dense symbols, like DNA alphabets.
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
+#[cfg_attr(feature = "mem_dbg", copy_type)]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[savefile_doc_hidden]
+#[cfg_attr(feature = "savefile", savefile_doc_hidden)]
 #[derive(Debug, Clone, Copy)]
 pub struct Block64 {
     data: u64,
 }
 
 impl sealed::Sealed for Block64 {}
+
+impl MaybeMemDbgCopy for Block64 {}
 
 impl MaybeSavefile for Block64 {}
 

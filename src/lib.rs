@@ -86,8 +86,9 @@ use text_with_rank_support::{
 /// The FM-Index data structure.
 ///
 /// See [crate-level documentation](self) for details.
+#[cfg_attr(feature = "mem_dbg", derive(mem_dbg::MemSize, mem_dbg::MemDbg))]
 #[cfg_attr(feature = "savefile", derive(savefile::savefile_derive::Savefile))]
-#[savefile_doc_hidden]
+#[cfg_attr(feature = "savefile", savefile_doc_hidden)]
 #[derive(Clone)]
 pub struct FmIndex<I, R = CondensedTextWithRankSupport<I, Block64>> {
     alphabet: Alphabet,
@@ -349,6 +350,27 @@ mod maybe_savefile {
     impl MaybeSavefile for i32 {}
     impl MaybeSavefile for u32 {}
     impl MaybeSavefile for i64 {}
+}
+
+mod maybe_mem_dbg {
+    #[cfg(feature = "mem_dbg")]
+    pub trait MaybeMemDbg: mem_dbg::MemSize + mem_dbg::MemDbg {}
+
+    #[cfg(not(feature = "mem_dbg"))]
+    pub trait MaybeMemDbg {}
+
+    #[cfg(feature = "mem_dbg")]
+    pub trait MaybeMemDbgCopy:
+        mem_dbg::MemSize + mem_dbg::MemDbg + mem_dbg::CopyType<Copy = mem_dbg::True>
+    {
+    }
+
+    #[cfg(not(feature = "mem_dbg"))]
+    pub trait MaybeMemDbgCopy {}
+
+    impl MaybeMemDbgCopy for i32 {}
+    impl MaybeMemDbgCopy for u32 {}
+    impl MaybeMemDbgCopy for i64 {}
 }
 
 mod sealed {
