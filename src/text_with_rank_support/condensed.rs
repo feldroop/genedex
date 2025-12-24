@@ -6,7 +6,10 @@ use crate::{
     maybe_savefile::MaybeSavefile, sealed::Sealed,
 };
 
-use super::block::{Block, Block64};
+use super::{
+    block::{Block, Block64},
+    prefetch_index,
+};
 
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
@@ -345,6 +348,20 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
         let block_count = accumulator_block.count_ones_before(index_in_block);
 
         superblock_offset + block_offset + block_count
+    }
+
+    #[inline(always)]
+    fn prefetch(&self, idx: usize) {
+        let symbol = 0;
+
+        let superblock_offset_idx = self.superblock_offset_idx(symbol, idx);
+        prefetch_index(&self.interleaved_superblock_offsets, superblock_offset_idx);
+
+        let block_offset_idx = self.block_offset_idx(symbol, idx);
+        prefetch_index(&self.interleaved_blocks, block_offset_idx);
+
+        let block_range = self.block_range(idx);
+        prefetch_index(&self.interleaved_blocks, block_range.start);
     }
 
     #[inline(always)]
