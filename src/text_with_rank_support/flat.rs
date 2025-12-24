@@ -33,17 +33,20 @@ pub struct FlatTextWithRankSupport<I, B = Block64> {
 }
 
 impl<I: IndexStorage, B: Block> FlatTextWithRankSupport<I, B> {
+    #[inline(always)]
     fn superblock_offset_idx(&self, symbol: u8, idx: usize) -> usize {
         let symbol_usize = symbol as usize;
         (idx / self.superblock_size) * self.alphabet_size + symbol_usize
     }
 
+    #[inline(always)]
     fn block_idx(&self, symbol: u8, idx: usize) -> usize {
         let symbol_usize = symbol as usize;
         let used_bits_per_block = B::NUM_BITS - NUM_BLOCK_OFFSET_BITS;
         (idx / used_bits_per_block) * self.alphabet_size + symbol_usize
     }
 
+    #[inline(always)]
     fn idx_in_block(idx: usize) -> usize {
         let used_bits_per_block = B::NUM_BITS - NUM_BLOCK_OFFSET_BITS;
         idx % used_bits_per_block
@@ -59,6 +62,7 @@ impl<I: IndexStorage, B: Block> Sealed for FlatTextWithRankSupport<I, B> {}
 impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
     for FlatTextWithRankSupport<I, B>
 {
+    #[inline(always)]
     fn construct_from_maybe_slice_compressed_text<S: SliceCompression>(
         text: &[u8],
         uncompressed_text_len: usize,
@@ -121,10 +125,12 @@ impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
         }
     }
 
+    #[inline(always)]
     fn _alphabet_size(&self) -> usize {
         self.alphabet_size
     }
 
+    #[inline(always)]
     fn _text_len(&self) -> usize {
         self.text_len
     }
@@ -218,6 +224,7 @@ impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
 }
 
 impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for FlatTextWithRankSupport<I, B> {
+    #[inline(always)]
     unsafe fn rank_unchecked(&self, symbol: u8, idx: usize) -> usize {
         // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
         // and since the alphabet has a size of at least 2
@@ -245,6 +252,7 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for FlatTextWithRankSuppo
         superblock_offset + block_offset + block_count
     }
 
+    #[inline(always)]
     fn symbol_at(&self, idx: usize) -> u8 {
         assert!(idx < self.text_len);
 

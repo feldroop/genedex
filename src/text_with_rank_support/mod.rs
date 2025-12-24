@@ -103,6 +103,7 @@ pub trait TextWithRankSupport<I: IndexStorage>:
     /// Returns the number of occurrences of `symbol` in `text[0..idx]`.
     ///
     /// The running time is in O(1).
+    #[inline(always)]
     fn rank(&self, symbol: u8, idx: usize) -> usize {
         let is_safe = (symbol as usize) < self.alphabet_size() && idx <= self.text_len();
         assert!(is_safe);
@@ -123,10 +124,12 @@ pub trait TextWithRankSupport<I: IndexStorage>:
     /// The running time is in O(1).
     fn symbol_at(&self, idx: usize) -> u8;
 
+    #[inline(always)]
     fn text_len(&self) -> usize {
         self._text_len()
     }
 
+    #[inline(always)]
     fn alphabet_size(&self) -> usize {
         self._alphabet_size()
     }
