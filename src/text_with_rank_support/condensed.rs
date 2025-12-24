@@ -6,7 +6,10 @@ use crate::{
     maybe_savefile::MaybeSavefile, sealed::Sealed,
 };
 
-use super::block::{Block, Block64};
+use super::{
+    block::{Block, Block64},
+    prefetch_index,
+};
 
 use num_traits::{NumCast, PrimInt};
 use rayon::prelude::*;
@@ -30,15 +33,18 @@ pub struct CondensedTextWithRankSupport<I, B = Block64> {
 }
 
 impl<I: IndexStorage, B: Block> CondensedTextWithRankSupport<I, B> {
+    #[inline(always)]
     fn superblock_offset_idx(&self, symbol: u8, idx: usize) -> usize {
         let superblock_size = u16::MAX as usize + 1;
         (idx / superblock_size) * self.alphabet_size + symbol as usize
     }
 
+    #[inline(always)]
     fn block_offset_idx(&self, symbol: u8, idx: usize) -> usize {
         (idx / B::NUM_BITS) * self.alphabet_size + symbol as usize
     }
 
+    #[inline(always)]
     fn block_range(&self, idx: usize) -> Range<usize> {
         let alphabet_num_bits = ilog2_ceil_for_nonzero(self.alphabet_size);
         let interleaved_blocks_start = (idx / B::NUM_BITS) * alphabet_num_bits;
@@ -56,6 +62,7 @@ impl<I: IndexStorage, B: Block> Sealed for CondensedTextWithRankSupport<I, B> {}
 impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
     for CondensedTextWithRankSupport<I, B>
 {
+    #[inline(always)]
     fn construct_from_maybe_slice_compressed_text<S: SliceCompression>(
         text: &[u8],
         uncompressed_text_len: usize,
@@ -123,10 +130,12 @@ impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
         }
     }
 
+    #[inline(always)]
     fn _alphabet_size(&self) -> usize {
         self.alphabet_size
     }
 
+    #[inline(always)]
     fn _text_len(&self) -> usize {
         self.text_len
     }
@@ -288,6 +297,7 @@ impl<I: IndexStorage, B: Block> super::PrivateTextWithRankSupport<I>
 }
 
 impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRankSupport<I, B> {
+    #[inline(always)]
     unsafe fn rank_unchecked(&self, mut symbol: u8, idx: usize) -> usize {
         // SAFETY: all of the index accesses are in the valid range if idx is at most text.len()
         // and since the alphabet has a size of at least 2
@@ -340,6 +350,21 @@ impl<I: IndexStorage, B: Block> TextWithRankSupport<I> for CondensedTextWithRank
         superblock_offset + block_offset + block_count
     }
 
+    #[inline(always)]
+    fn prefetch(&self, idx: usize) {
+        let symbol = 0;
+
+        let superblock_offset_idx = self.superblock_offset_idx(symbol, idx);
+        prefetch_index(&self.interleaved_superblock_offsets, superblock_offset_idx);
+
+        let block_offset_idx = self.block_offset_idx(symbol, idx);
+        prefetch_index(&self.interleaved_blocks, block_offset_idx);
+
+        let block_range = self.block_range(idx);
+        prefetch_index(&self.interleaved_blocks, block_range.start);
+    }
+
+    #[inline(always)]
     fn symbol_at(&self, idx: usize) -> u8 {
         assert!(idx < self.text_len);
 
@@ -409,6 +434,7 @@ fn fill_superblock<I: PrimInt, B: Block, S: SliceCompression>(
     }
 }
 
+#[inline(always)]
 fn ilog2_ceil_for_nonzero(value: usize) -> usize {
     usize::BITS as usize - value.leading_zeros() as usize - value.is_power_of_two() as usize
 }
