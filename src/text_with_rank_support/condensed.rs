@@ -390,7 +390,7 @@ fn fill_superblock<I: PrimInt, B: Block, S: SliceCompression>(
             let superblock_count = &mut interleaved_superblock_offsets[symbol_usize];
             *superblock_count = *superblock_count + I::one();
 
-            block_offsets_sum[symbol_usize] += 1;
+            block_offsets_sum[symbol_usize] = block_offsets_sum[symbol_usize].wrapping_add(1);
 
             for block in blocks.iter_mut() {
                 block.set_bit_assuming_zero(index_in_block, symbol & 1);
