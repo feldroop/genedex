@@ -7,12 +7,9 @@
 ⚠️ **Warning:** this library is in an early stage. The API is still subject to changes. Currently, only a basic FM-Index is implemented. For upcoming features, take a look at the [roadmap]. Any kind of feedback and suggestions via the issue tracker is highly appreciated! ⚠️
 
 The [FM-Index] is a full-text index data structure that allows efficiently counting and retrieving the positions of all occurrenes of (typically short) sequences in very large texts. It is widely used in sequence analysis and bioinformatics.
+The benefits of `genedex` include:
 
-The implementation of this library is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
-by Simon Gene Gottlieb, who also was a great help while developing the library. This data structure is central to the inner workings of
-the FM-Index. The encoding attemps to provide a good trade-off between memory usage and running time of queries. 
-A second, faster and less memory efficient encoding is also implemented. Further benefits of `genedex` include:
-
+- Multiple optimized implementations with different running time/memory usage trade-offs.
 - Fast, parallel and memory efficient index construction by leveraging [`libsais-rs`] and [`rayon`].
 - Support for indexing a set of texts, like chromosomes of a genome.
 - A flexible cursor API.
@@ -43,6 +40,12 @@ for hit in index.locate(query) {
 }
 ```
 
+## References
+
+- The default (_condensed_) implementations is based on:
+
+    > Gottlieb, S.G., Reinert, K.: _Engineering rank queries on bit vectors and strings_ (2025) DOI: [10.1186/s13015-025-00291-9](https://doi.org/10.1186/s13015-025-00291-9)
+
 ## Comparison to Other Crates and Benchmarks
 
 A thorough comparison of all available Rust implementations of the FM-Index can be found [here](https://github.com/feldroop/rust-fmindex-benchmark). The main benchmark results are shown below.
@@ -55,6 +58,12 @@ Running time and index memory usage of searching 377 MB of queries of length 50 
 
 <img src="https://raw.githubusercontent.com/feldroop/rust-fmindex-benchmark/refs/heads/main/plots/img/Locate-Hg38.svg" />
 
+## Acknowledgements
+
+- The implementation of this library is based on an encoding for the text with rank support data structure (a.k.a. occurrence table)
+by Simon Gene Gottlieb, who also was a great help while developing the library.
+- Ragnar Groot Koerkamp, who develops the library [`quadrank`], was very helpful and supplied bug reports, suggestions and improvements to `genedex`.
+
 [FM-Index]: https://doi.org/10.1109/SFCS.2000.892127
 [`libsais-rs`]: https://github.com/feldroop/libsais-rs
 [`rayon`]: https://github.com/rayon-rs/rayon
@@ -62,3 +71,4 @@ Running time and index memory usage of searching 377 MB of queries of length 50 
 [`proptest`]: https://github.com/proptest-rs/proptest
 [roadmap]: ./ROADMAP.md
 [documentation]: https://docs.rs/genedex
+[`quadrank`]: https://github.com/RagnarGrootKoerkamp/quadrank
