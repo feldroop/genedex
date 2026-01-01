@@ -83,22 +83,13 @@ fn empty() {
 }
 
 #[test]
-fn superblock_size_text() {
-    let superblock_size = u16::MAX as usize + 1;
-    let alphabet_size = 3;
-    let text: Vec<_> = [0u8, 1, 2, 2, 1, 0, 0, 0, 1, 2]
-        .iter()
-        .cycle()
-        .copied()
-        .take(superblock_size)
-        .collect();
-
-    test_different_block_sizes_against_naive(&text, alphabet_size);
+fn superblock_size_text_of_single_character() {
+    let text = vec![0; u16::MAX as usize + 1];
+    test_different_block_sizes_against_naive(&text, 2);
 }
 
-// the key property of this test is that the text has the length 512
 #[test]
-fn failing_proptest0() {
+fn random_length_512() {
     let alphabet_size = 27;
     let text = [
         2, 2, 25, 0, 15, 19, 23, 7, 18, 13, 1, 20, 16, 14, 19, 15, 3, 4, 13, 17, 12, 22, 21, 8, 5,

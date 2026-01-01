@@ -294,12 +294,14 @@ fn fill_superblock<I: PrimInt, B: Block, S: SliceCompression>(
             let superblock_count = &mut interleaved_superblock_offsets[symbol_usize];
             *superblock_count = *superblock_count + I::one();
 
-            block_offsets_sum[symbol_usize] += 1;
+            // The wrapping add here is used for the same reason as in the condensed version at the same position,
+            // even though technically, there is no need for it due to the usage of u64.
+            block_offsets_sum[symbol_usize] = block_offsets_sum[symbol_usize].wrapping_add(1);
             blocks[symbol_usize].set_bit_assuming_zero(index_in_block + NUM_BLOCK_OFFSET_BITS, 1);
         }
     }
 
-    // annoying edge case, because the bit array we're storing is text.len() + 1 large
+    // Annoying edge case, because the bit array we're storing is text.len() + 1 large.
     if blocks_overshoot {
         let last_blocks = interleaved_blocks
             .rchunks_mut(alphabet_size)
