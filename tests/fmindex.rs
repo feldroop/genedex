@@ -261,44 +261,6 @@ fn run_queries<I: IndexStorage>(
     }
 }
 
-#[test]
-fn proptest_fail() {
-    let texts = vec![vec![71, 65]];
-
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
-
-    let existing_queries: Vec<_> = QuerySampler {
-        texts: &texts,
-        max_extent: 200,
-        rng: &mut rng,
-    }
-    .take(20)
-    .collect();
-    let random_queries: Vec<_> = RandomQueryGenerator {
-        max_len: 20,
-        rng: &mut rng,
-    }
-    .take(100)
-    .collect();
-
-    let random_queries_naive_hits: Vec<_> = random_queries
-        .iter()
-        .map(|q| naive_search(&texts, q))
-        .collect();
-
-    let index_i32 = FmIndexConfig::<i32>::new()
-        .lookup_table_depth(0)
-        .suffix_array_sampling_rate(1)
-        .construct_index(&texts, alphabet::ascii_dna());
-
-    run_queries(
-        &index_i32,
-        &existing_queries,
-        &random_queries,
-        &random_queries_naive_hits,
-    );
-}
-
 proptest! {
     // default is 256 and I'd like some more test cases that need to pass
     #![proptest_config(ProptestConfig {

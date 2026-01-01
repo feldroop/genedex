@@ -390,6 +390,9 @@ fn fill_superblock<I: PrimInt, B: Block, S: SliceCompression>(
             let superblock_count = &mut interleaved_superblock_offsets[symbol_usize];
             *superblock_count = *superblock_count + I::one();
 
+            // A wrapping add here is necessary for the case where a superblock consists exclusively of a single symbol.
+            // The wrapping only makes sure that no panic happens, the value does not make it to the FM-Index anyways,
+            // because it can only happen in the last iteration.
             block_offsets_sum[symbol_usize] = block_offsets_sum[symbol_usize].wrapping_add(1);
 
             for block in blocks.iter_mut() {
@@ -399,7 +402,9 @@ fn fill_superblock<I: PrimInt, B: Block, S: SliceCompression>(
         }
     }
 
-    // annoying edge case, because the bit array we're storing is text.len() + 1 large
+    // Annoying edge case, because the bit array we're storing is text.len() + 1 large.
+    // This can only be triggered if the last superblock does contain fewer blocks than possible at maximum.
+    // Therefore, the wrapping_add above will never make a difference.
     if blocks_overshoot {
         interleaved_block_offsets
             .rchunks_mut(alphabet_size)
