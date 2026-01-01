@@ -103,6 +103,7 @@ pub trait TextWithRankSupport<I: IndexStorage>:
     /// Returns the number of occurrences of `symbol` in `text[0..idx]`.
     ///
     /// The running time is in O(1).
+    #[inline(always)]
     fn rank(&self, symbol: u8, idx: usize) -> usize {
         let is_safe = (symbol as usize) < self.alphabet_size() && idx <= self.text_len();
         assert!(is_safe);
@@ -118,17 +119,49 @@ pub trait TextWithRankSupport<I: IndexStorage>:
     /// `idx` must be in the interval `[0, text.len()]` and `symbol` must be smaller than alphabet size.
     unsafe fn rank_unchecked(&self, symbol: u8, idx: usize) -> usize;
 
+    /// Prefetch the data needed to answer `rank_unchecked(idx)` quickly.
+    #[inline(always)]
+    fn prefetch(&self, symbol: u8, idx: usize) {
+        let _ = symbol;
+        let _ = idx;
+    }
+
     /// Recoveres the symbol of the text at given index `idx`.
     ///
     /// The running time is in O(1).
     fn symbol_at(&self, idx: usize) -> u8;
 
+    #[inline(always)]
     fn text_len(&self) -> usize {
         self._text_len()
     }
 
+    #[inline(always)]
     fn alphabet_size(&self) -> usize {
         self._alphabet_size()
+    }
+}
+
+/// Prefetch the cache line containing (the first byte of) `data[index]` into
+/// all levels of the cache.
+#[inline(always)]
+pub fn prefetch_index<T>(data: impl AsRef<[T]>, index: usize) {
+    let ptr = data.as_ref().as_ptr().wrapping_add(index) as *const i8;
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        std::arch::x86_64::_mm_prefetch(ptr, std::arch::x86_64::_MM_HINT_T0);
+    }
+    #[cfg(target_arch = "x86")]
+    unsafe {
+        std::arch::x86::_mm_prefetch(ptr, std::arch::x86::_MM_HINT_T0);
+    }
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        std::arch::aarch64::_prefetch(ptr, std::arch::aarch64::_PREFETCH_LOCALITY3);
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))]
+    {
+        // Do nothing.
     }
 }
 
