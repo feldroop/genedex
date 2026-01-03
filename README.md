@@ -42,7 +42,7 @@ for hit in index.locate(query) {
 
 ## References
 
-- The default (_condensed_) implementations is based on:
+- The default (_condensed_) implementation is based on:
 
     > Gottlieb, S.G., Reinert, K.: _Engineering rank queries on bit vectors and strings_ (2025) DOI: [10.1186/s13015-025-00291-9](https://doi.org/10.1186/s13015-025-00291-9)
 
