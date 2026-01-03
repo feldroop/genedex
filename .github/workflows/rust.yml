@@ -22,9 +22,9 @@ jobs:
       - name: Attempt to restore cached dependencies
         uses: Swatinem/rust-cache@v2
         id: rust-cache
-      - name: Build
+      - name: Build # Debug build
         run: cargo build --verbose
-      - name: Test
+      - name: Test # Test profile configured as release build, for faster prop testing.
         run: cargo test --verbose
       - name: Clippy
         run: cargo clippy --verbose -- -Dwarnings
