@@ -1,35 +1,40 @@
-name: Rust
+name: Test, Lint & Format CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-test:
-
+  ci:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Test
-      run: cargo test --verbose
-    - name: Clippy
-      run: cargo clippy --verbose -- -Dwarnings
-    - name: Documentation
-      run: cargo doc --no-deps --workspace
-    - name: Format
-      run: cargo fmt --all -- --check
-    - name: Examples
-      run: |
-        cargo run --example basic_usage
-        cargo run --example custom_alphabet
-        cargo run --example cursor
-        cargo run --example text_with_rank_support
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Attempt to restore cached dependencies
+        uses: Swatinem/rust-cache@v2
+        id: rust-cache
+      - name: Build
+        run: cargo build --verbose
+      - name: Test
+        run: cargo test --verbose
+      - name: Clippy
+        run: cargo clippy --verbose -- -Dwarnings
+      - name: Documentation
+        run: cargo doc --no-deps --workspace
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Examples
+        run: |
+          cargo run --example basic_usage
+          cargo run --example custom_alphabet
+          cargo run --example cursor
+          cargo run --example text_with_rank_support
