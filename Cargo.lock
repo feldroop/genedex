@@ -257,6 +257,7 @@ dependencies = [
  "mem_dbg",
  "memchr",
  "num-traits",
+ "prefetch-index",
  "proptest",
  "psacak",
  "rand",
@@ -489,6 +490,12 @@ checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
 ]
+
+[[package]]
+name = "prefetch-index"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92c3f29d949b65b31cbb5b151e8cf676950899630427f16923075e504c6c1d08"
 
 [[package]]
 name = "proc-macro-error-attr2"

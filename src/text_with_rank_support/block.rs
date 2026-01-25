@@ -77,11 +77,13 @@ impl MaybeSavefile for Block512 {}
 impl Block for Block512 {
     const NUM_BITS: usize = 512;
 
+    #[inline(always)]
     fn zeroes() -> Self {
         Self { data: [0; 8] }
     }
 
     #[doc(hidden)]
+    #[inline(always)]
     fn negate(&mut self) {
         for i in 0..8 {
             self.data[i] = !self.data[i];
@@ -89,24 +91,28 @@ impl Block for Block512 {
     }
 
     #[doc(hidden)]
+    #[inline(always)]
     fn set_to_self_and(&mut self, other: Self) {
         for i in 0..8 {
             self.data[i] &= other.data[i];
         }
     }
 
+    #[inline(always)]
     fn get_bit(&self, idx: usize) -> u8 {
         let store_idx = idx / 64;
         let idx_in_store = idx % 64;
         ((self.data[store_idx] >> idx_in_store) & 1) as u8
     }
 
+    #[inline(always)]
     fn set_bit_assuming_zero(&mut self, idx: usize, bit: u8) {
         let store_idx = idx / 64;
         let idx_in_store = idx % 64;
         self.data[store_idx] |= (bit as u64) << idx_in_store;
     }
 
+    #[inline(always)]
     fn count_ones_before(&self, idx: usize) -> usize {
         let mut sum = 0;
 
@@ -119,10 +125,12 @@ impl Block for Block512 {
         sum as usize
     }
 
+    #[inline(always)]
     fn integrate_block_offset_assuming_zero(&mut self, block_offset: u64) {
         self.data[0] = block_offset;
     }
 
+    #[inline(always)]
     fn extract_block_offset_and_then_zeroize_it(&mut self) -> usize {
         let mask = !(u64::MAX << NUM_BLOCK_OFFSET_BITS);
         let block_offset = self.data[0] & mask;
@@ -152,35 +160,43 @@ impl MaybeSavefile for Block64 {}
 impl Block for Block64 {
     const NUM_BITS: usize = 64;
 
+    #[inline(always)]
     fn zeroes() -> Self {
         Self { data: 0 }
     }
 
+    #[inline(always)]
     fn negate(&mut self) {
         self.data = !self.data;
     }
 
+    #[inline(always)]
     fn set_to_self_and(&mut self, other: Self) {
         self.data &= other.data;
     }
 
+    #[inline(always)]
     fn get_bit(&self, idx: usize) -> u8 {
         ((self.data >> idx) & 1) as u8
     }
 
+    #[inline(always)]
     fn set_bit_assuming_zero(&mut self, idx: usize, bit: u8) {
         self.data |= (bit as u64) << idx;
     }
 
+    #[inline(always)]
     fn count_ones_before(&self, idx: usize) -> usize {
         let masked_data = self.data & !(u64::MAX << idx);
         masked_data.count_ones() as usize
     }
 
+    #[inline(always)]
     fn integrate_block_offset_assuming_zero(&mut self, block_offset: u64) {
         self.data = block_offset;
     }
 
+    #[inline(always)]
     fn extract_block_offset_and_then_zeroize_it(&mut self) -> usize {
         let mask = !(u64::MAX << NUM_BLOCK_OFFSET_BITS);
         let block_offset = self.data & mask;
