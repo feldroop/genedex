@@ -21,7 +21,7 @@ edition = "2024"
 [dependencies]
 num-traits = "0.2.19"
 libsais = "0.2.0"
-bytemuck = "1.23.2"
+bytemuck = { version = "1.23.2", features = ["must_cast"] }
 memchr = "2.7"
 
 psacak = { version = "0.1", optional = true }

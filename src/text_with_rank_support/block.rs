@@ -38,6 +38,8 @@ pub trait Block:
     #[doc(hidden)]
     fn negate(&mut self);
 
+    fn load(data: &[u16]) -> Self;
+
     #[doc(hidden)]
     fn set_to_self_and(&mut self, other: Self);
 
@@ -81,14 +83,19 @@ impl Block for Block512 {
         Self { data: [0; 8] }
     }
 
-    #[doc(hidden)]
     fn negate(&mut self) {
         for i in 0..8 {
             self.data[i] = !self.data[i];
         }
     }
 
-    #[doc(hidden)]
+    fn load(data: &[u16]) -> Self {
+        let mut this_data = [0; 8];
+        let this_data_u16 = bytemuck::must_cast_slice_mut(&mut this_data);
+        this_data_u16.copy_from_slice(data);
+        Self { data: this_data }
+    }
+
     fn set_to_self_and(&mut self, other: Self) {
         for i in 0..8 {
             self.data[i] &= other.data[i];
@@ -158,6 +165,13 @@ impl Block for Block64 {
 
     fn negate(&mut self) {
         self.data = !self.data;
+    }
+
+    fn load(data: &[u16]) -> Self {
+        let mut this_data = [0];
+        let this_data_u16 = bytemuck::must_cast_slice_mut(&mut this_data);
+        this_data_u16.copy_from_slice(data);
+        Self { data: this_data[0] }
     }
 
     fn set_to_self_and(&mut self, other: Self) {
